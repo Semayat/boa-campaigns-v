@@ -45,7 +45,7 @@
   </div>
 
   <div id="detailView" class="hidden">
-    <div class="crumb"><a onclick="backToList()"><i class="fas fa-arrow-left"></i> All campaigns</a> <i class="fas fa-chevron-right"></i> <span id="crumbCamp" class="campname"></span></div>
+    <div class="crumb" style="justify-content:space-between"><div><a onclick="backToList()"><i class="fas fa-arrow-left"></i> All campaigns</a> <i class="fas fa-chevron-right"></i> <span id="crumbCamp" class="campname"></span></div><div id="campActionsBox"></div></div>
     <div class="sg c4" id="natRow"></div>
     <div id="kpiChipsBox"></div>
     <div class="tabs">
@@ -115,7 +115,17 @@ async function openCampaign(id){
   CUR=CAMPAIGNS.find(function(c){return c.id===id;});
   $('listView').classList.add('hidden');$('detailView').classList.remove('hidden');
   $('crumbCamp').textContent=CUR.name;
+  $('campActionsBox').innerHTML=campaignActionsHtml(CUR);
   $('targetsTabBtn').classList.toggle('hidden',CUR.initiatorLevel!=='ho');
+  await loadDetail();
+}
+async function reloadAfterCampaignEdit(){
+  await load();
+  CUR=CAMPAIGNS.find(function(c){return c.id===CUR.id;});
+  if(!CUR)return; // was deleted
+  $('crumbCamp').textContent=CUR.name;
+  $('campActionsBox').innerHTML=campaignActionsHtml(CUR);
+  $('listView').classList.add('hidden');$('detailView').classList.remove('hidden');
   await loadDetail();
 }
 function backToList(){$('detailView').classList.add('hidden');$('listView').classList.remove('hidden');load();}

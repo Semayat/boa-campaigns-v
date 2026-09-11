@@ -388,6 +388,39 @@ app.all('/api/data', async (req, res) => {
     return res.json({ ok: true, campaign });
   }
 
+  function isCampaignInitiator(session, c) {
+    if (session.role !== c.initiatorLevel) return false;
+    if (c.initiatorLevel === 'ho') return session.role === 'ho';
+    return session.scopeId === c.initiatorId;
+  }
+
+  if (action === 'updateCampaign') {
+    const { campaignId, name, reward, endDate, offDays, targets } = req.body || {};
+    const c = await Store._get('campaign:' + campaignId); if (!c) return res.status(404).json({ error: 'Campaign not found' });
+    if (!isCampaignInitiator(session, c)) return res.status(403).json({ error: 'Only the campaign initiator can edit it' });
+    if (name && String(name).trim()) c.name = String(name).trim();
+    if (endDate) {
+      if (endDate < c.startDate) return res.status(400).json({ error: 'End date cannot be before the start date' });
+      c.endDate = endDate;
+      c.days = Math.max(1, Math.round((new Date(c.endDate) - new Date(c.startDate)) / 86400000) + 1);
+    }
+    if (Array.isArray(offDays)) c.offDays = Array.from(new Set(offDays)).filter((d) => d >= c.startDate && d <= c.endDate);
+    c.workingDays = computeWorkingDays(c);
+    if (reward !== undefined) c.reward = reward && (reward.description || (reward.tiers || []).length) ? { description: String(reward.description || ''), tiers: Array.isArray(reward.tiers) ? reward.tiers : [] } : null;
+    if (targets) { const keys = kpiKeys(c); keys.forEach((k) => { if (targets[k] !== undefined) c.targets[k] = Number(targets[k]) || 0; }); }
+    await Store._set('campaign:' + campaignId, c);
+    return res.json({ ok: true, campaign: c });
+  }
+  if (action === 'deleteCampaign') {
+    const { campaignId } = req.body || {};
+    const c = await Store._get('campaign:' + campaignId); if (!c) return res.status(404).json({ error: 'Campaign not found' });
+    if (!isCampaignInitiator(session, c)) return res.status(403).json({ error: 'Only the campaign initiator can delete it' });
+    await Store._delPrefix('target:' + campaignId + ':');
+    await Store._delPrefix('entry:' + campaignId + ':');
+    await Store._del('campaign:' + campaignId);
+    return res.json({ ok: true });
+  }
+
   if (action === 'listCampaigns') {
     const all = await Store._list('campaign:');
     let mine = [];
@@ -397,7 +430,7 @@ app.all('/api/data', async (req, res) => {
     else if (session.role === 'staff') mine = all.filter((c) => c.scope.branchIds.includes(session.scopeId));
     else if (session.role === 'officer') { const of = await Store._get('officer:' + session.scopeId + ':' + session.officerId); const bIds = (of && of.branchIds) || []; mine = all.filter((c) => c.scope.branchIds.some((id) => bIds.includes(id))); }
     mine.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
-    return res.json({ campaigns: mine.map((c) => ({ id: c.id, name: c.name, initiatorLevel: c.initiatorLevel, initiatorId: c.initiatorId, startDate: c.startDate, endDate: c.endDate, days: c.days, workingDays: c.workingDays || c.days, offDays: c.offDays || [], kpis: c.kpis, reward: c.reward, mine: (session.role === c.initiatorLevel && (c.initiatorId === (session.scopeId || null))) })) });
+    return res.json({ campaigns: mine.map((c) => ({ id: c.id, name: c.name, initiatorLevel: c.initiatorLevel, initiatorId: c.initiatorId, startDate: c.startDate, endDate: c.endDate, days: c.days, workingDays: c.workingDays || c.days, offDays: c.offDays || [], kpis: c.kpis, targets: c.targets, reward: c.reward, mine: (session.role === c.initiatorLevel && (c.initiatorId === (session.scopeId || null))) })) });
   }
 
   if (action === 'getCampaign') {
@@ -680,13 +713,19 @@ app.all('/api/data', async (req, res) => {
 
   // ---------------- REPORTS (campaign-scoped) ----------------
   if (action === 'report') {
-    if (session.role === 'staff' || session.role === 'officer') return res.status(403).json({ error: 'Reports are available to Branch, District and HO' });
+    if (session.role === 'officer') return res.status(403).json({ error: 'Reports are available to Staff, Branch, District and HO' });
     const campaignId = req.query.campaignId;
     const c = await Store._get('campaign:' + campaignId); if (!c) return res.status(404).json({ error: 'Campaign not found' });
     const keys = kpiKeys(c);
     const period = req.query.period || 'monthly'; const week = parseInt(req.query.week || '0', 10); const day = req.query.day || ''; const month = req.query.month || '';
     let allEntries, title, scopeTarget;
-    if (session.role === 'branch') { allEntries = await Store._list('entry:' + campaignId + ':' + session.scopeId + ':'); const b = await Store.getBranch(session.scopeId); title = b.name; scopeTarget = await branchEffectiveTarget(c, session.scopeId); }
+    if (session.role === 'staff') {
+      const branch = await Store.getBranch(session.scopeId); const staffRec = (branch.staff || []).find((s) => s.id === session.staffId);
+      const activeStaff = (branch.staff || []).filter((s) => s.active !== false);
+      allEntries = (await Store._list('entry:' + campaignId + ':' + session.scopeId + ':')).filter((e) => e.staffId === session.staffId);
+      title = staffRec ? staffRec.name : 'My'; scopeTarget = await staffEffectiveTarget(c, session.scopeId, session.staffId, activeStaff.length);
+    }
+    else if (session.role === 'branch') { allEntries = await Store._list('entry:' + campaignId + ':' + session.scopeId + ':'); const b = await Store.getBranch(session.scopeId); title = b.name; scopeTarget = await branchEffectiveTarget(c, session.scopeId); }
     else if (session.role === 'district') { allEntries = (await Store._list('entry:' + campaignId + ':')).filter((e) => e.districtId === session.scopeId); const d = await Store.getDistrict(session.scopeId); title = d.name; scopeTarget = await districtEffectiveTarget(c, session.scopeId); }
     else { allEntries = await Store._list('entry:' + campaignId + ':'); title = 'National'; scopeTarget = c.targets; }
     const approved = allEntries.filter((e) => e.status === 'approved');
@@ -733,7 +772,7 @@ app.all('/api/data', async (req, res) => {
     const today = todayStr() > c.endDate ? c.endDate : todayStr();
     const weekNum = inWeek(today, c.startDate);
     const monthKey = today.slice(0, 7);
-    const dailyPerKpi = c.kpis.map((k, i) => { const key = 'kpi' + i, tgt = targets[key] || 0; const perDay = wd > 0 ? tgt / wd : 0; return { key, name: k.name, unit: k.unit, plan: isOffDay(c, today) ? 0 : perDay }; });
+    const dailyPerKpi = c.kpis.map((k, i) => { const key = 'kpi' + i, tgt = targets[key] || 0; const perDay = wd > 0 ? Math.round(tgt / wd) : 0; return { key, name: k.name, unit: k.unit, plan: isOffDay(c, today) ? 0 : perDay }; });
     const weeklyElapsed = workingDaysElapsedThrough(c, weekEndDate(weekNum, c));
     const monthlyElapsed = workingDaysElapsedThrough(c, monthEndDate(monthKey, c));
     return res.json({
@@ -845,7 +884,7 @@ async function runSeed(reset) {
     const cur = await Store.getDistrict(d.id);
     await Store.setDistrict({
       id: d.id, name: d.name, branchCount: d.branchCount,
-      auth: (cur && cur.auth && !reset) ? cur.auth : { passwordHash: hash((process.env.DISTRICT_PASSWORD || 'BoA-District') + '-' + d.id), mustChangePassword: false }
+      auth: (cur && cur.auth && !reset) ? cur.auth : { passwordHash: hash(process.env.DISTRICT_PASSWORD || '456'), mustChangePassword: false }
     });
   }
   let count = 0; const TYPES = ['Standard', 'Corporate', 'Premium'];

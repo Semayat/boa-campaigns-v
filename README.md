@@ -10,7 +10,35 @@ This is a full architectural rewrite from the earlier "Dare to Serve" system
 and entries all use a new data model. **Do not point this at your v4
 database** — see "Upgrading from v4" below.
 
-## Updates in this build (on top of v5)
+## Latest updates
+
+- **District login fixed for good** — every district now signs in with the
+  same simple password, **`456`**, instead of a different password per
+  district. That per-district scheme was almost certainly the source of the
+  repeated sign-in trouble; this removes the ambiguity entirely. Re-verified
+  end-to-end (API and a full browser sign-in) with this exact password.
+- **Whole numbers everywhere in plans** — daily/weekly/monthly/grand plan
+  figures are now rounded (e.g. a target that works out to 0.83/day now
+  shows as 1, not a fraction).
+- **Staff "My Report"** — staff now have their own Daily/Weekly/Monthly/
+  Grand cumulative report (same engine as Branch/District/HO, scoped to
+  just their own approved entries).
+- **Edit and Delete campaign** — whoever started a campaign (HO, District,
+  or Branch) can now edit its name, end date, off-days, reward, and targets,
+  or permanently delete it (which also removes its targets and entries).
+  Only the actual initiator can edit or delete — everyone else is blocked.
+  The start date and KPI list can't be changed after creation, to avoid
+  corrupting existing entries.
+- **My Plan redesigned** as a clean per-KPI table (Daily / Weekly / Monthly
+  / Grand columns) instead of a dense paragraph — much easier to scan.
+- **Hamburger menu on mobile** — the header's notification bell, password
+  change, and logout now collapse into a single menu button on small
+  screens, matching common mobile app patterns.
+- **Visual polish pass** — richer card styling (accent borders, hover
+  lift), refined color use across stat cards and tables, more prominent
+  campaign-name styling.
+
+## Updates in v5 (on top of v4)
 
 These changes are additive — if you already deployed v5, you can update the
 code in place with **no database reset needed**; existing campaigns keep
@@ -141,6 +169,16 @@ grouped campaign sections, the cumulative report view, the branch's
 explicit cascaded-target display, the My Plan tab, and mobile layouts for
 the sign-in page and dashboards.
 
+A final 25 automated checks cover the latest round: the new shared district
+password, whole-number plan rounding, staff "My Report," and campaign
+edit/delete (including permission checks confirming only the actual
+initiator can edit or delete). Visually confirmed: district sign-in with
+`456` in a live browser flow, the redesigned My Plan table, the edit
+campaign modal (including that it correctly pre-fills existing target
+values — an early version of this didn't, and was caught and fixed during
+testing), the delete confirmation, the mobile hamburger menu opening and
+closing correctly, and the staff My Report cumulative view.
+
 ## Deploy on Render — Blueprint (recommended, one click)
 
 1. Push this repo to GitHub, with `render.yaml` at the **top level** (next to
@@ -162,8 +200,11 @@ the sign-in page and dashboards.
 
 ### Default passwords (if you left the Blueprint prompts blank)
 - **Head Office:** `BoA-HO-2026`
-- **District:** `BoA-District-<district-id>` — e.g. `BoA-District-east_addis`
-  (district IDs are shown on the district picker on the sign-in page)
+- **District:** `456` — the same simple password for every district (this was
+  simplified from an earlier per-district scheme that was causing sign-in
+  confusion; each district should change it after first sign-in from the
+  password button in the header, and HO can reset any district's password
+  at any time from then on)
 - **Branch:** `BoA-Branch-2026` (shared starting password for every branch —
   each branch should change it after first sign-in; a District can reset an
   individual branch's password at any time from then on)

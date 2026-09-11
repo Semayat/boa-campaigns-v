@@ -44,11 +44,22 @@ function renderHeader(roleLabel,roleIcon){
     +'<div class="logo"><img src="'+LOGO+'" alt="BoA" onerror="this.parentNode.innerHTML=\'<span>አ</span>\'"></div>'
     +'<div><div class="bname">BoA <em>Campaigns</em></div><div class="bsub">Campaign Command Center</div></div></div>'
     +'<div class="hdr-r">'
+    +'<span class="rolechip"><i class="'+roleIcon+'"></i> <span class="rc-name">'+roleLabel+(s&&s.name?(' · '+s.name):'')+'</span></span>'
+    +'<div class="hdr-desktop-actions">'
     +'<div class="notifwrap"><button class="btn bo bsm" onclick="toggleNotifPanel()" id="notifBtn"><i class="fas fa-bell"></i><span id="notifCount" class="notifcount hidden">0</span></button>'
     +'<div id="notifPanel" class="notifpanel hidden"></div></div>'
-    +'<span class="rolechip"><i class="'+roleIcon+'"></i> <span class="rc-name">'+roleLabel+(s&&s.name?(' · '+s.name):'')+'</span></span>'
     +'<button class="btn bo bsm" onclick="showChangePw()"><i class="fas fa-key"></i></button>'
-    +'<button class="btn bo bsm" onclick="logout()"><i class="fas fa-right-from-bracket"></i> Logout</button></div></header>'
+    +'<button class="btn bo bsm" onclick="logout()"><i class="fas fa-right-from-bracket"></i> Logout</button>'
+    +'</div>'
+    +'<div class="hdr-mobile-actions">'
+    +'<button class="btn bo bsm hamburger-btn" onclick="toggleHamburgerMenu()" id="hamBtn"><i class="fas fa-bars"></i><span id="notifCountM" class="notifcount hidden">0</span></button>'
+    +'</div>'
+    +'</div></header>'
+    +'<div id="hamMenu" class="hammenu hidden">'
+    +'<button onclick="hamAction(\'notif\')"><i class="fas fa-bell"></i> Notifications <span id="hamNotifCount" class="notifcount hidden" style="position:static;margin-left:auto"></span></button>'
+    +'<button onclick="hamAction(\'pw\')"><i class="fas fa-key"></i> Change Password</button>'
+    +'<button onclick="hamAction(\'logout\')"><i class="fas fa-right-from-bracket"></i> Logout</button>'
+    +'</div>'
     +'<div id="pwModal" class="modal hidden"><div class="modalcard"><div class="stit"><div class="ico g"><i class="fas fa-key"></i></div>Change Password</div>'
     +'<div style="margin-top:10px"><label>New Password</label><input type="password" id="pwNew1" placeholder="••••••••"></div>'
     +'<div style="margin-top:10px"><label>Confirm</label><input type="password" id="pwNew2" placeholder="••••••••"></div>'
@@ -65,8 +76,10 @@ async function doChangePw(){
 async function loadNotifBell(){
   if(!$('notifCount'))return;
   try{var d=await api('listNotifications');}catch(e){return;}
-  var c=$('notifCount');
-  if(d.unread>0){c.textContent=d.unread>9?'9+':d.unread;c.classList.remove('hidden');}else{c.classList.add('hidden');}
+  [$('notifCount'),$('notifCountM'),$('hamNotifCount')].forEach(function(c){
+    if(!c)return;
+    if(d.unread>0){c.textContent=d.unread>9?'9+':d.unread;c.classList.remove('hidden');}else{c.classList.add('hidden');}
+  });
   window._NOTIFS=d.notifications;
 }
 function toggleNotifPanel(){
@@ -77,6 +90,23 @@ function toggleNotifPanel(){
   p.classList.remove('hidden');
 }
 async function ackNotif(id){try{await api('markNotificationRead',{method:'POST',body:{notifId:id}});await loadNotifBell();toggleNotifPanel();toggleNotifPanel();}catch(e){}}
+// ---- mobile hamburger menu (collapses bell/password/logout into one dropdown) ----
+function toggleHamburgerMenu(){
+  var m=$('hamMenu');
+  if(!m.classList.contains('hidden')){m.classList.add('hidden');return;}
+  m.classList.remove('hidden');
+}
+function hamAction(kind){
+  $('hamMenu').classList.add('hidden');
+  if(kind==='notif'){
+    var items=window._NOTIFS||[];
+    var p=el('div','notifpanel hammobilepanel');
+    p.innerHTML=(items.length?items.map(function(n){return '<div class="notifitem'+(n.read?'':' unread')+'" onclick="ackNotif(\''+n.id+'\');this.closest(\'.hammobilepanel\').remove()"><div class="notifmsg">'+n.message+'</div><div class="notiftime">'+timeAgo(n.createdAt)+'</div></div>';}).join(''):'<div class="notifempty">No notifications yet.</div>')
+      +'<button class="btn bo bsm" style="margin:10px;width:calc(100% - 20px)" onclick="this.parentNode.remove()">Close</button>';
+    document.body.appendChild(p);
+  } else if(kind==='pw'){ showChangePw(); }
+  else if(kind==='logout'){ logout(); }
+}
 function timeAgo(iso){var d=new Date(iso),now=new Date();var s=Math.floor((now-d)/1000);if(s<60)return 'just now';if(s<3600)return Math.floor(s/60)+'m ago';if(s<86400)return Math.floor(s/3600)+'h ago';return Math.floor(s/86400)+'d ago';}
 
 function scoreBadge(s){if(s>=90)return '<span class="bdg bx">Excellent</span>';if(s>=60)return '<span class="bdg bf">On Track</span>';if(s>=30)return '<span class="bdg bf">Building</span>';return '<span class="bdg bl">Needs Push</span>';}
@@ -198,17 +228,72 @@ function offDaysList(){ return Array.from(OFFDAYS); }
 
 // ---- My Plan renderer (daily / weekly / monthly / grand) ----
 function renderPlanGrid(plan){
-  function box(label,items,isDaily){
-    if(!items||!items.length)return '';
-    var v=items.length===1?fmtVal(items[0].plan,items[0].unit):items.map(function(k){return k.name+': '+fmtVal(k.plan,k.unit);}).join(' · ');
-    return '<div class="planbox"><div class="pl">'+label+'</div><div class="pv" style="font-size:'+(items.length>1?'.85rem':'1.15rem')+'">'+v+'</div></div>';
-  }
-  return '<div class="plangrid">'
-    +box('Daily Plan',plan.daily)
-    +box('Weekly Plan (to date)',plan.weekly)
-    +box('Monthly Plan (to date)',plan.monthly)
-    +box('Grand Target',plan.grand)
+  if(!plan.grand||!plan.grand.length)return '<div class="empty"><i class="fas fa-calendar-check"></i><div>No plan yet.</div></div>';
+  return '<div class="tw"><table class="plantable"><thead><tr><th>KPI</th><th class="num"><i class="fas fa-sun"></i> Daily</th><th class="num"><i class="fas fa-calendar-week"></i> Weekly (to date)</th><th class="num"><i class="fas fa-calendar-days"></i> Monthly (to date)</th><th class="num"><i class="fas fa-flag-checkered"></i> Grand</th></tr></thead><tbody>'
+   +plan.grand.map(function(g,i){
+     var d=(plan.daily&&plan.daily[i])?plan.daily[i].plan:0;
+     var w=(plan.weekly&&plan.weekly[i])?plan.weekly[i].plan:0;
+     var m=(plan.monthly&&plan.monthly[i])?plan.monthly[i].plan:0;
+     return '<tr><td><b>'+g.name+'</b></td><td class="num">'+fmtVal(d,g.unit)+'</td><td class="num">'+fmtVal(w,g.unit)+'</td><td class="num">'+fmtVal(m,g.unit)+'</td><td class="num"><b>'+fmtVal(g.plan,g.unit)+'</b></td></tr>';
+   }).join('')
+   +'</tbody></table></div>';
+}
+
+// ---- edit / delete campaign (shared modal, used by ho/district/branch detail views) ----
+function campaignActionsHtml(c){
+  if(!c.mine)return '';
+  return '<button class="btn bo bsm" onclick="openEditCampaignModal()"><i class="fas fa-pen"></i> Edit</button> <button class="btn bl bsm" onclick="openDeleteCampaignModal()"><i class="fas fa-trash"></i> Delete</button>';
+}
+var EDIT_KPI_ROWS=[];
+function openEditCampaignModal(){
+  var c=CUR;
+  EDIT_KPI_ROWS=c.kpis.map(function(k,i){return {name:k.name,unit:k.unit,target:(c.targets&&c.targets['kpi'+i])||0};});
+  offDaysInit(c.offDays||[]);
+  var html='<div class="modalcard" style="width:520px;max-width:92vw;max-height:85vh;overflow-y:auto">'
+    +'<div class="stit"><div class="ico g"><i class="fas fa-pen"></i></div>Edit <span class="campname">'+c.name+'</span></div>'
+    +'<div style="margin-top:10px"><label>Campaign Name</label><input id="editName" value="'+c.name.replace(/"/g,'&quot;')+'"></div>'
+    +'<div class="row" style="margin-top:10px"><div style="flex:1"><label>Start Date</label><input value="'+c.startDate+'" disabled style="opacity:.6"></div><div style="flex:1"><label>End Date</label><input type="date" id="editEnd" value="'+c.endDate+'" min="'+c.startDate+'" onchange="editRenderCal()"></div></div>'
+    +'<div class="muted" style="font-size:.72rem;margin-top:4px">Start date and KPI list cannot be changed once a campaign has data. Extend or shorten the end date instead.</div>'
+    +'<div style="margin-top:12px"><label>Off Days</label><div id="editCalBox"></div></div>'
+    +'<div style="margin-top:12px"><label>Target per KPI</label>'
+    +c.kpis.map(function(k,i){return '<div class="row" style="gap:8px;margin-bottom:6px"><span class="muted" style="min-width:150px">'+k.name+'</span>'+numInputHtml('id="editTgt'+i+'"',EDIT_KPI_ROWS[i].target,'style="flex:1"')+'</div>';}).join('')
+    +'</div>'
+    +'<div style="margin-top:12px"><label>Reward (optional)</label><input id="editReward" value="'+((c.reward&&c.reward.description)||'').replace(/"/g,'&quot;')+'"></div>'
+    +'<div class="row" style="margin-top:16px;justify-content:flex-end"><button class="btn bo bsm" onclick="closeCampaignModal()">Cancel</button><button class="btn bg bsm" id="saveEditBtn" onclick="saveEditCampaign()"><i class="fas fa-check"></i> Save Changes</button></div>'
     +'</div>';
+  var m=el('div','modal');m.id='campModal';m.innerHTML=html;document.body.appendChild(m);
+  editRenderCal();
+}
+function editRenderCal(){ offDaysRender(CUR.startDate,$('editEnd').value,'editCalBox'); }
+function closeCampaignModal(){var m=$('campModal');if(m)m.remove();}
+async function saveEditCampaign(){
+  var name=$('editName').value.trim(); if(!name){toast('Name is required','err');return;}
+  var end=$('editEnd').value;
+  var targets={}; CUR.kpis.forEach(function(k,i){targets['kpi'+i]=parseNum($('editTgt'+i).value);});
+  var reward=$('editReward').value.trim()?{description:$('editReward').value.trim()}:null;
+  var btn=$('saveEditBtn');btn.disabled=true;btn.innerHTML='<span class="ring"></span> Saving…';
+  try{
+    await api('updateCampaign',{method:'POST',body:{campaignId:CUR.id,name:name,endDate:end,offDays:offDaysList(),targets:targets,reward:reward}});
+    toast('Campaign updated ✓');closeCampaignModal();
+    if(typeof reloadAfterCampaignEdit==='function')await reloadAfterCampaignEdit();
+  }catch(e){toast(e.message,'err');}
+  btn.disabled=false;btn.innerHTML='<i class="fas fa-check"></i> Save Changes';
+}
+function openDeleteCampaignModal(){
+  var html='<div class="modalcard" style="width:400px">'
+    +'<div class="stit"><div class="ico" style="background:rgba(239,68,68,.12);color:var(--er)"><i class="fas fa-triangle-exclamation"></i></div>Delete Campaign?</div>'
+    +'<div class="sdesc">This permanently deletes <b>'+CUR.name+'</b>, all targets set for it, and all submitted entries. This cannot be undone.</div>'
+    +'<div class="row" style="margin-top:16px;justify-content:flex-end"><button class="btn bo bsm" onclick="closeCampaignModal()">Cancel</button><button class="btn bl bsm" id="confirmDeleteBtn" onclick="confirmDeleteCampaign()"><i class="fas fa-trash"></i> Delete Permanently</button></div>'
+    +'</div>';
+  var m=el('div','modal');m.id='campModal';m.innerHTML=html;document.body.appendChild(m);
+}
+async function confirmDeleteCampaign(){
+  var btn=$('confirmDeleteBtn');btn.disabled=true;btn.innerHTML='<span class="ring"></span> Deleting…';
+  try{
+    await api('deleteCampaign',{method:'POST',body:{campaignId:CUR.id}});
+    toast('Campaign deleted');closeCampaignModal();
+    if(typeof backToList==='function')backToList();
+  }catch(e){toast(e.message,'err');btn.disabled=false;btn.innerHTML='<i class="fas fa-trash"></i> Delete Permanently';}
 }
 
 var KPI_ROWS=[];

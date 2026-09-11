@@ -236,3 +236,50 @@ input.numtext{font-variant-numeric:tabular-nums;text-align:right}
   .llogo{width:52px;height:52px}
   .lhead h1{font-size:1.25rem}
 }
+
+/* ===== v7 additions: hamburger menu, enhanced cards/coloring, plan table ===== */
+
+/* ---- Hamburger menu (mobile header) ---- */
+.hdr-desktop-actions{display:flex;align-items:center;gap:9px}
+.hdr-mobile-actions{display:none;position:relative}
+.hamburger-btn{position:relative}
+.hammenu{position:fixed;top:56px;right:12px;left:12px;background:var(--s);border:1px solid var(--b);border-radius:var(--rl);box-shadow:var(--shb);z-index:250;overflow:hidden;animation:hamdrop .18s ease-out}
+@keyframes hamdrop{from{opacity:0;transform:translateY(-8px)}to{opacity:1;transform:translateY(0)}}
+.hammenu button{display:flex;align-items:center;gap:10px;width:100%;padding:13px 16px;background:none;border:none;border-bottom:1px solid var(--b);font-family:var(--ff);font-size:.86rem;font-weight:700;color:var(--t2);text-align:left;cursor:pointer}
+.hammenu button:last-child{border-bottom:none}
+.hammenu button:active{background:var(--s2)}
+.hammenu button i{color:var(--gold);width:16px;text-align:center}
+.hammobilepanel{position:fixed;top:56px;right:12px;left:12px;max-height:70vh;z-index:260}
+
+/* ---- Enhanced cards: subtle top accent + richer hover ---- */
+.card{position:relative}
+.card::before{content:'';position:absolute;top:0;left:18px;right:18px;height:2px;background:linear-gradient(90deg,transparent,rgba(245,168,0,.35),transparent);border-radius:0 0 2px 2px;opacity:0;transition:opacity .25s}
+.card:hover::before{opacity:1}
+.card:hover{transform:translateY(-1px)}
+.ico{box-shadow:0 3px 10px rgba(10,35,66,.22)}
+.ico.g{box-shadow:0 3px 10px rgba(245,168,0,.3)}
+
+/* ---- Enhanced stat cards: accent bar + lift ---- */
+.sc{position:relative;overflow:hidden;transition:transform .2s,box-shadow .2s}
+.sc::after{content:'';position:absolute;top:0;left:0;bottom:0;width:3px;background:linear-gradient(180deg,var(--navy),var(--navy2))}
+.sc.gold::after{background:linear-gradient(180deg,var(--gold),var(--goldd))}
+.sc:hover{box-shadow:0 6px 18px rgba(10,35,66,.1);transform:translateY(-1px)}
+
+/* ---- Enhanced tabs/badges/chips ---- */
+.tab.active{box-shadow:0 2px 8px rgba(10,35,66,.12)}
+.bdg{font-weight:800;letter-spacing:.01em}
+.kchip{transition:transform .15s}
+.campcard{border-left:3px solid transparent}
+.campcard:hover{border-left-color:var(--gold);transform:translateX(2px)}
+
+/* ---- Plan table (My Plan) ---- */
+.plantable thead th{background:var(--navy);color:#fff}
+.plantable thead th:first-child{border-radius:0}
+.plantable thead th i{color:var(--gold);margin-right:4px}
+.plantable tbody tr:hover{background:rgba(245,168,0,.05)}
+.plantable tbody td:last-child{background:rgba(245,168,0,.08)}
+
+@media(max-width:760px){
+  .hdr-desktop-actions{display:none}
+  .hdr-mobile-actions{display:flex}
+}

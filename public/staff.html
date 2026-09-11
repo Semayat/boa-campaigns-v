@@ -33,6 +33,7 @@
         <button class="tab active" onclick="tab('entry',this)"><i class="fas fa-pen-to-square"></i> Daily Entry</button>
         <button class="tab" onclick="tab('mine',this)"><i class="fas fa-list-check"></i> My Submissions</button>
         <button class="tab" onclick="tab('myplan',this)"><i class="fas fa-calendar-check"></i> My Plan</button>
+        <button class="tab" onclick="tab('myreport',this)"><i class="fas fa-chart-line"></i> My Report</button>
         <button class="tab" onclick="tab('feedback',this)"><i class="fas fa-comments"></i> Feedback</button>
       </div>
       <div class="pane active" id="pane-entry"><div class="card">
@@ -50,6 +51,11 @@
       </div></div>
       <div class="pane" id="pane-mine"><div class="card"><div class="stit"><div class="ico g"><i class="fas fa-list-check"></i></div>My Submissions</div><div id="mineBox"></div></div></div>
       <div class="pane" id="pane-myplan"><div class="card"><div class="stit"><div class="ico g"><i class="fas fa-calendar-check"></i></div>My Plan</div><div class="sdesc">What you should aim for today, this week, this month, and overall.</div><div id="planBox"></div></div></div>
+      <div class="pane" id="pane-myreport"><div class="card">
+        <div class="stit"><div class="ico g"><i class="fas fa-chart-line"></i></div>My Report</div>
+        <div class="row" style="margin:8px 0 14px"><div style="max-width:150px"><label>Period</label><select id="repPeriod" onchange="loadMyReport()"><option value="grand">Grand (whole campaign)</option><option value="monthly" selected>Monthly</option><option value="weekly">Weekly</option><option value="daily">Daily</option></select></div><div style="max-width:150px" id="weekWrap" class="hidden"><label>Week</label><select id="repWeek" onchange="loadMyReport()"><option value="1">Week 1</option><option value="2">Week 2</option><option value="3">Week 3</option><option value="4">Week 4</option><option value="5">Week 5</option><option value="6">Week 6</option></select></div><div style="max-width:170px" id="monthWrap" class="hidden"><label>Month</label><input type="month" id="repMonth" onchange="loadMyReport()"></div><div style="max-width:170px" id="dayWrap" class="hidden"><label>Day</label><select id="repDay" onchange="loadMyReport()"></select></div></div>
+        <div id="myReportBox"></div>
+      </div></div>
       <div class="pane" id="pane-feedback"><div class="card"><div class="stit"><div class="ico g"><i class="fas fa-comments"></i></div>Feedback</div><div id="feedbackBox"></div></div></div>
     </div>
   </div>
@@ -73,7 +79,35 @@ async function loadCampaigns(){
   try{CAMPAIGNS=(await api('listCampaigns')).campaigns;}catch(e){toast(e.message,'err');return;}
   $('campListBox').innerHTML=groupedCampaignListHtml(CAMPAIGNS);
 }
-function tab(name,btn){document.querySelectorAll('#campDetailView .tab').forEach(function(t){t.classList.remove('active');});btn.classList.add('active');document.querySelectorAll('#campDetailView .pane').forEach(function(p){p.classList.remove('active');});$('pane-'+name).classList.add('active');if(name==='mine')loadMine();if(name==='feedback')loadFeedback();if(name==='myplan')loadMyPlan();}
+function tab(name,btn){document.querySelectorAll('#campDetailView .tab').forEach(function(t){t.classList.remove('active');});btn.classList.add('active');document.querySelectorAll('#campDetailView .pane').forEach(function(p){p.classList.remove('active');});$('pane-'+name).classList.add('active');if(name==='mine')loadMine();if(name==='feedback')loadFeedback();if(name==='myplan')loadMyPlan();if(name==='myreport')loadMyReport();}
+var LASTREP=null;
+async function loadMyReport(){
+  var period=$('repPeriod').value;
+  $('weekWrap').classList.toggle('hidden',period!=='weekly');
+  $('monthWrap').classList.toggle('hidden',period!=='monthly');
+  $('dayWrap').classList.toggle('hidden',period!=='daily');
+  var qs='campaignId='+CUR.id+'&period='+period;
+  if(period==='weekly')qs+='&week='+$('repWeek').value;
+  if(period==='monthly'){if(!$('repMonth').value)$('repMonth').value=defaultReportMonth(CUR);qs+='&month='+$('repMonth').value;}
+  if(period==='daily')qs+='&day='+($('repDay').value||'');
+  try{var r=await api('report',{qs:qs});}catch(e){toast(e.message,'err');return;}
+  LASTREP=r;
+  if(period==='daily'&&$('repDay').options.length===0){if(r.dates&&r.dates.length){$('repDay').innerHTML=r.dates.map(function(d){return '<option value="'+d+'">'+d+'</option>';}).join('');$('repDay').value=r.dates[r.dates.length-1];return loadMyReport();}else $('repDay').innerHTML='<option value="">— no data —</option>';}
+  var label=period==='weekly'?('Week '+r.week+' (through '+r.asOfDate+')'):(period==='daily'?('Day '+(r.day||'—')):(period==='monthly'?(r.month+' (through '+r.asOfDate+')'):('Whole campaign (through '+r.asOfDate+')')));
+  var cum=r.cumulative;
+  var cumBox='<div class="card" style="background:var(--s2);box-shadow:none;margin-bottom:14px">'
+    +'<div class="stit" style="margin-bottom:2px"><div class="ico g"><i class="fas fa-layer-group"></i></div>Cumulative to date</div>'
+    +'<div class="sdesc">Your cumulative actual vs. your cumulative plan, from campaign start through '+r.asOfDate+'.</div>'
+    +'<div class="sg c2" style="margin-bottom:8px">'
+      +statCard('Cumulative Achieved',cum.achieved.toFixed(1)+'%','vs full target','gold',cum.achieved,'gold')
+      +statCard('Cumulative Pace',cum.pct.toFixed(0)+'%',paceTag(cum.pct))
+    +'</div>'
+    +renderKpiTableCumulative(cum)
+    +'</div>';
+  var sum='<div class="sg c3" style="margin-bottom:14px">'+r.kpis.map(function(k,i){var v=r.totals['kpi'+i]||0;return statCard(k.name,fmtVal(v,k.unit),'this period');}).join('')+'</div>';
+  var trend=r.trend.length?('<div class="tw"><table><thead><tr><th>Date</th>'+r.kpis.map(function(k){return '<th class="num">'+k.name+'</th>';}).join('')+'</tr></thead><tbody>'+r.trend.map(function(t){return '<tr><td><b>'+t.date+'</b></td>'+r.kpis.map(function(k,i){return '<td class="num">'+fmtVal(t.totals['kpi'+i]||0,k.unit)+'</td>';}).join('')+'</tr>';}).join('')+'</tbody></table></div>'):'<div class="empty"><i class="fas fa-inbox"></i><div>No approved data for this period.</div></div>';
+  $('myReportBox').innerHTML='<div class="muted" style="margin-bottom:10px">'+label+'</div>'+cumBox+'<div class="stit" style="margin-bottom:2px"><div class="ico"><i class="fas fa-calendar-day"></i></div>This period only</div>'+sum+trend;
+}
 async function loadMyPlan(){
   var p;try{p=await api('myPlan',{qs:'campaignId='+CUR.id});}catch(e){$('planBox').innerHTML='';return;}
   $('planBox').innerHTML=renderPlanGrid(p);
