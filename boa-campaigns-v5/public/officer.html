@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>BoA Campaigns · District Officer</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+<div id="hdr"></div>
+<div class="wrap">
+  <div id="pwGate" class="hidden">
+    <div class="hero"><div class="hbadge"><i class="fas fa-key"></i> First Sign-In</div><h1>Set Your Password</h1><p>Choose your own password before continuing.</p></div>
+    <div class="card" style="max-width:420px">
+      <div style="margin-top:4px"><label>New Password</label><input type="password" id="newPw" placeholder="••••••••"></div>
+      <div style="margin-top:10px"><label>Confirm Password</label><input type="password" id="newPw2" placeholder="••••••••" onkeydown="if(event.key==='Enter')setPassword()"></div>
+      <div style="margin-top:14px"><button class="btn bg" id="setPwBtn" onclick="setPassword()"><i class="fas fa-check"></i> Set Password &amp; Continue</button></div>
+    </div>
+  </div>
+
+  <div id="main" class="hidden">
+    <div class="hero"><div class="hbadge"><i class="fas fa-user-shield"></i> District Officer</div><h1 id="ofName">Officer</h1><p>Audit your assigned branches — feedback, justification requests, and performance.</p></div>
+
+    <div class="card">
+      <label>Campaign</label>
+      <select id="campSel" onchange="loadBranches()"></select>
+    </div>
+
+    <div class="card">
+      <div class="stit"><div class="ico g"><i class="fas fa-store"></i></div>Assigned Branches</div>
+      <div class="sdesc">Branches below 35% pace are flagged — consider requesting justification.</div>
+      <div id="branchBox"></div>
+    </div>
+
+    <div id="feedbackFormCard" class="card hidden">
+      <div class="stit"><div class="ico g"><i class="fas fa-comment-dots"></i></div>Give Feedback — <span id="fbBranchName"></span></div>
+      <div class="row" style="margin-top:8px">
+        <div style="flex:1"><label>Scope</label><select id="fbScope"><option value="branch">Whole branch</option></select></div>
+        <div style="flex:1"><label>Period</label><select id="fbPeriod"><option value="daily">Daily</option><option value="weekly" selected>Weekly</option></select></div>
+      </div>
+      <div style="margin-top:10px"><label>Message</label><textarea id="fbMessage" rows="3" style="width:100%;padding:10px;border:1px solid var(--b);border-radius:var(--r);font-family:inherit" placeholder="e.g. Your pace is below 35% this week — please explain what is affecting deposit mobilization."></textarea></div>
+      <div class="row" style="margin-top:12px;justify-content:flex-end"><button class="btn bo bsm" onclick="closeFeedbackForm()">Cancel</button><button class="btn bg bsm" id="sendFbBtn" onclick="sendFeedback()"><i class="fas fa-paper-plane"></i> Send Feedback</button></div>
+    </div>
+
+    <div class="card">
+      <div class="stit"><div class="ico g"><i class="fas fa-comments"></i></div>My Feedback Threads</div>
+      <div id="feedbackListBox"></div>
+    </div>
+  </div>
+</div>
+<div id="toast"></div>
+<script src="app.js"></script>
+<script>
+var S=requireRole('officer'),CAMPAIGNS=[],BRANCHES=[],CUR_BRANCH=null;
+document.getElementById('hdr').innerHTML=renderHeader('District Officer','fas fa-user-shield');
+
+async function setPassword(){
+  var p1=$('newPw').value,p2=$('newPw2').value;
+  if(!p1||p1.length<4){toast('Password must be at least 4 characters','err');return;}
+  if(p1!==p2){toast('Passwords do not match','err');return;}
+  var btn=$('setPwBtn');btn.disabled=true;btn.innerHTML='<span class="ring"></span> Saving…';
+  try{await api('changeMyPassword',{method:'POST',body:{password:p1}});var s=getSession();s.mustChangePassword=false;saveSession(s);toast('Password set ✓');$('pwGate').classList.add('hidden');$('main').classList.remove('hidden');init();}catch(e){toast(e.message,'err');}
+  btn.disabled=false;btn.innerHTML='<i class="fas fa-check"></i> Set Password & Continue';
+}
+async function init(){
+  $('ofName').textContent=S.name||'Officer';
+  try{CAMPAIGNS=(await api('listCampaigns')).campaigns;}catch(e){toast(e.message,'err');return;}
+  var groups={ho:'Head Office Campaigns',district:'District Campaigns',branch:'Branch Campaigns'};
+  var html='';
+  ['ho','district','branch'].forEach(function(lvl){
+    var items=CAMPAIGNS.filter(function(c){return c.initiatorLevel===lvl;});
+    if(!items.length)return;
+    html+='<optgroup label="'+groups[lvl]+'">'+items.map(function(c){return '<option value="'+c.id+'">'+c.name+'</option>';}).join('')+'</optgroup>';
+  });
+  $('campSel').innerHTML=html||'<option value="">— no campaigns —</option>';
+  await loadBranches();
+  await loadFeedbackList();
+}
+async function loadBranches(){
+  var campaignId=$('campSel').value;
+  var d;try{d=await api('officerBranches',{qs:campaignId?('campaignId='+campaignId):''});}catch(e){toast(e.message,'err');return;}
+  BRANCHES=d.branches;
+  if(!BRANCHES.length){$('branchBox').innerHTML='<div class="empty"><i class="fas fa-store-slash"></i><div>No branches assigned to you yet — ask your district manager.</div></div>';return;}
+  $('branchBox').innerHTML='<div class="tw"><table><thead><tr><th>Branch</th><th class="num">Achieved</th><th class="num">Pace</th><th>Status</th><th style="text-align:right">Action</th></tr></thead><tbody>'
+   +BRANCHES.map(function(b){
+     var pctCell=b.pct!=null?('<span class="kchip '+kpiPctClass(b.pct)+'">'+b.pct.toFixed(0)+'%</span>'):'<span class="muted">—</span>';
+     var achCell=b.achieved!=null?(b.achieved.toFixed(1)+'%'):'—';
+     var flag=b.needsJustification?'<span class="bdg bl"><i class="fas fa-triangle-exclamation"></i> Needs justification</span>':'<span class="bdg bx">OK</span>';
+     return '<tr><td><b>'+b.name+'</b></td><td class="num">'+achCell+'</td><td class="num">'+pctCell+'</td><td>'+flag+'</td><td style="text-align:right"><button class="btn bo bsm" onclick="openFeedbackForm(\''+b.id+'\',\''+b.name.replace(/"/g,'')+'\')"><i class="fas fa-comment-dots"></i> Feedback</button></td></tr>';
+   }).join('')+'</tbody></table></div>';
+}
+function openFeedbackForm(branchId,branchName){
+  CUR_BRANCH=branchId;
+  $('fbBranchName').textContent=branchName;
+  $('fbMessage').value='';
+  $('feedbackFormCard').classList.remove('hidden');
+  $('feedbackFormCard').scrollIntoView({behavior:'smooth'});
+}
+function closeFeedbackForm(){$('feedbackFormCard').classList.add('hidden');CUR_BRANCH=null;}
+async function sendFeedback(){
+  var msg=$('fbMessage').value.trim();if(!msg){toast('Write a message first','err');return;}
+  var btn=$('sendFbBtn');btn.disabled=true;btn.innerHTML='<span class="ring"></span> Sending…';
+  try{
+    await api('postFeedback',{method:'POST',body:{branchId:CUR_BRANCH,campaignId:$('campSel').value||null,period:$('fbPeriod').value,message:msg}});
+    toast('Feedback sent ✓');closeFeedbackForm();await loadFeedbackList();
+  }catch(e){toast(e.message,'err');}
+  btn.disabled=false;btn.innerHTML='<i class="fas fa-paper-plane"></i> Send Feedback';
+}
+async function loadFeedbackList(){
+  var d;try{d=await api('listFeedback');}catch(e){toast(e.message,'err');return;}
+  if(!d.feedback.length){$('feedbackListBox').innerHTML='<div class="empty"><i class="fas fa-comments"></i><div>No feedback sent yet.</div></div>';return;}
+  $('feedbackListBox').innerHTML=d.feedback.map(function(f){
+    return '<div class="feeditem"><div class="row" style="justify-content:space-between"><b>'+f.branchName+(f.staffName?(' · '+f.staffName):'')+'</b><span class="muted" style="font-size:.72rem">'+new Date(f.createdAt).toLocaleDateString()+'</span></div>'
+     +f.thread.map(function(m){return '<div class="feedmsg by'+m.by+'"><span class="who">'+m.name+'</span> — '+m.message+'</div>';}).join('')+'</div>';
+  }).join('');
+}
+if(S){ if(S.mustChangePassword){$('pwGate').classList.remove('hidden');} else {$('main').classList.remove('hidden');init();} }
+</script>
+</body>
+</html>
