@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>BoA Campaigns · District</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+<div id="hdr"></div>
+<div class="wrap">
+  <div class="hero"><div class="hbadge"><i class="fas fa-sitemap"></i> District</div><h1 id="dName">District</h1><p>Campaigns, branch performance, officers, and feedback.</p></div>
+
+  <div class="tabs">
+    <button class="tab active" onclick="mtab('campaigns',this)"><i class="fas fa-flag"></i> Campaigns</button>
+    <button class="tab" onclick="mtab('officers',this)"><i class="fas fa-user-shield"></i> District Officers</button>
+    <button class="tab" onclick="mtab('feedback',this)"><i class="fas fa-comments"></i> Feedback</button>
+  </div>
+
+  <div class="pane active" id="pane-campaigns">
+    <div id="listView">
+      <div class="card"><div class="row" style="justify-content:space-between;align-items:center">
+        <div class="stit"><div class="ico g"><i class="fas fa-flag"></i></div>Campaigns</div>
+        <button class="btn bg bsm" onclick="showCreate()"><i class="fas fa-plus"></i> Start Campaign</button>
+      </div><div id="campListBox" style="margin-top:12px"></div></div>
+    </div>
+    <div id="createView" class="hidden"><div class="card">
+      <div class="stit"><div class="ico g"><i class="fas fa-flag"></i></div>Start a District Campaign</div>
+      <div class="sdesc">This campaign will involve every branch in your district.</div>
+      <div style="margin-top:10px"><label>Campaign Name</label><input id="cName" placeholder="e.g. East Addis Savings Drive"></div>
+      <div class="row" style="margin-top:10px"><div style="flex:1"><label>Start Date</label><input type="date" id="cStart" onchange="renderCalPreview()"></div><div style="flex:1"><label>End Date</label><input type="date" id="cEnd" onchange="renderCalPreview()"></div></div>
+      <div style="margin-top:14px"><label>Campaign Calendar — click to exclude off days</label><div id="calBox"></div></div>
+      <div style="margin-top:14px"><label>KPIs &amp; Weights</label><div id="kpiRows"></div><button type="button" class="btn bo bsm" onclick="kpiRowAddD()"><i class="fas fa-plus"></i> Add KPI</button><span class="muted" style="margin-left:10px">Total weight: <b id="kpiWeightTotal">0</b>%</span></div>
+      <div style="margin-top:14px"><label>District Target per KPI</label><div id="targetInputs"></div></div>
+      <div style="margin-top:14px"><label>Reward (optional)</label><input id="cReward" placeholder="optional"></div>
+      <div class="row" style="margin-top:16px;justify-content:flex-end"><button class="btn bo bsm" onclick="hideCreate()">Cancel</button><button class="btn bg bsm" id="createBtn" onclick="createCampaign()"><i class="fas fa-check"></i> Create Campaign</button></div>
+    </div></div>
+    <div id="detailView" class="hidden">
+      <div class="crumb"><a onclick="backToList()"><i class="fas fa-arrow-left"></i> All campaigns</a> <i class="fas fa-chevron-right"></i> <span id="crumbCamp" class="campname"></span></div>
+      <div class="sg c4" id="statRow"></div>
+      <div id="kpiChipsBox"></div>
+      <div class="tabs">
+        <button class="tab active" onclick="dtab('branches',this)"><i class="fas fa-ranking-star"></i> Branches</button>
+        <button class="tab" onclick="dtab('officers2',this)"><i class="fas fa-user-tie"></i> Staff</button>
+        <button class="tab" onclick="dtab('groups',this)"><i class="fas fa-layer-group"></i> Support Officer Groups</button>
+        <button class="tab" id="targetsTabBtn" onclick="dtab('targets',this)"><i class="fas fa-bullseye"></i> Set Branch Targets</button>
+        <button class="tab" onclick="dtab('reports',this)"><i class="fas fa-chart-line"></i> Reports</button>
+      </div>
+      <div class="pane active" id="pane-branches"><div class="card"><div id="branchBox"></div></div></div>
+      <div class="pane" id="pane-officers2"><div class="card"><div id="offBox"></div></div></div>
+      <div class="pane" id="pane-groups"><div class="card"><div id="grpBox"></div></div></div>
+      <div class="pane" id="pane-targets"><div class="card">
+        <div class="stit"><div class="ico g"><i class="fas fa-bullseye"></i></div>Set Branch Targets</div>
+        <div class="sdesc">Distribute your allocated target across your branches. Sum should equal your own target per KPI.</div>
+        <div id="targetsBox"></div>
+        <div class="row" style="margin-top:12px;justify-content:flex-end"><button class="btn bg bsm" id="saveTargetsBtn" onclick="saveBranchTargets()"><i class="fas fa-floppy-disk"></i> Save Targets</button></div>
+        <div id="validationBox" style="margin-top:10px"></div>
+      </div></div>
+      <div class="pane" id="pane-reports"><div class="card">
+        <div class="row" style="margin:8px 0 14px"><div style="max-width:150px"><label>Period</label><select id="repPeriod" onchange="loadReport()"><option value="grand">Grand (whole campaign)</option><option value="monthly" selected>Monthly</option><option value="weekly">Weekly</option><option value="daily">Daily</option></select></div><div style="max-width:150px" id="weekWrap" class="hidden"><label>Week</label><select id="repWeek" onchange="loadReport()"><option value="1">Week 1</option><option value="2">Week 2</option><option value="3">Week 3</option><option value="4">Week 4</option><option value="5">Week 5</option><option value="6">Week 6</option></select></div><div style="max-width:170px" id="monthWrap" class="hidden"><label>Month</label><input type="month" id="repMonth" onchange="loadReport()"></div><div style="max-width:170px" id="dayWrap" class="hidden"><label>Day</label><select id="repDay" onchange="loadReport()"></select></div><div style="flex:1"></div><button class="btn bo bsm" id="xlsBtn" onclick="exportReportExcel(LASTREP)" disabled><i class="fas fa-file-excel"></i> Excel</button><button class="btn bo bsm" id="pdfBtn" onclick="exportReportPDF(LASTREP)" disabled><i class="fas fa-file-pdf"></i> PDF</button></div>
+        <div id="reportBox"></div>
+      </div></div>
+    </div>
+  </div>
+
+  <div class="pane" id="pane-officers">
+    <div class="card">
+      <div class="stit"><div class="ico g"><i class="fas fa-user-shield-plus"></i></div>Add District Officer</div>
+      <div class="sdesc">Officers can view assigned branches and audit their performance (feedback, justification requests).</div>
+      <div class="row" style="margin-top:8px"><input id="newOfName" placeholder="e.g. Meron Assefa or OFC-014" style="max-width:280px" onkeydown="if(event.key==='Enter')addOfficer()"><button class="btn bg bsm" onclick="addOfficer()"><i class="fas fa-plus"></i> Add Officer</button></div>
+      <div id="genPwBox"></div>
+    </div>
+    <div class="card"><div class="stit"><div class="ico"><i class="fas fa-user-shield"></i></div>Officers</div><div id="officerListBox"></div></div>
+  </div>
+
+  <div class="pane" id="pane-feedback">
+    <div class="card"><div class="stit"><div class="ico g"><i class="fas fa-comments"></i></div>Feedback Threads</div><div class="sdesc">All audit feedback from your officers, across branches.</div><div id="feedbackBox"></div></div>
+  </div>
+</div>
+<div id="toast"></div>
+<script src="app.js"></script>
+<script>
+var S=requireRole('district'),CAMPAIGNS=[],CUR=null,OFFICERS=[],BRANCHES_CACHE=[];
+document.getElementById('hdr').innerHTML=renderHeader('District','fas fa-sitemap');
+function statCard(label,val,sub,cls,pctv,fillcls){var bar=pctv!=null?'<div class="pbar"><div class="pfill '+(fillcls||'')+'" style="width:'+Math.min(100,pctv)+'%"></div></div>':'';return '<div class="sc '+(cls||'')+'"><div class="sv">'+val+'</div><div class="sl">'+label+'</div><div class="sx">'+(sub||'')+'</div>'+bar+'</div>';}
+function mtab(name,btn){document.querySelectorAll('.wrap>.tabs>.tab').forEach(function(t){t.classList.remove('active');});btn.classList.add('active');['campaigns','officers','feedback'].forEach(function(n){$('pane-'+n).classList.toggle('active',n===name);});if(name==='officers')loadOfficers();if(name==='feedback')loadFeedback();}
+
+async function load(){
+  try{CAMPAIGNS=(await api('listCampaigns')).campaigns;}catch(e){toast(e.message,'err');return;}
+  $('campListBox').innerHTML=groupedCampaignListHtml(CAMPAIGNS);
+}
+function showCreate(){$('listView').classList.add('hidden');$('createView').classList.remove('hidden');kpiRowsInit([{name:'',unit:'count',weight:100}]);renderTargetInputsD();offDaysInit([]);$('calBox').innerHTML='<div class="muted" style="font-size:.78rem">Pick start and end dates to see the calendar.</div>';}
+function hideCreate(){$('createView').classList.add('hidden');$('listView').classList.remove('hidden');}
+function renderCalPreview(){offDaysRender($('cStart').value,$('cEnd').value,'calBox');}
+function renderTargetInputsD(){$('targetInputs').innerHTML=KPI_ROWS.map(function(k,i){return '<div class="row" style="gap:8px;margin-bottom:6px"><span class="muted" style="min-width:160px">'+(k.name||('KPI '+(i+1)))+'</span>'+numInputHtml('id="tgt'+i+'"',0,'style="flex:1"')+'</div>';}).join('');}
+function kpiRowAddD(){kpiRowAdd();renderTargetInputsD();}
+var _oku=kpiRowUpdate; kpiRowUpdate=function(i,f,v){_oku(i,f,v);renderTargetInputsD();};
+var _okr=kpiRowRemove; kpiRowRemove=function(i){_okr(i);renderTargetInputsD();};
+
+async function createCampaign(){
+  var name=$('cName').value.trim(),start=$('cStart').value,end=$('cEnd').value;
+  if(!name||!start||!end){toast('Fill in name and dates','err');return;}
+  if(end<start){toast('End date must be after start date','err');return;}
+  var w=KPI_ROWS.reduce(function(s,k){return s+(+k.weight||0);},0);
+  if(w!==100){toast('KPI weights must total 100% (now '+w+'%)','err');return;}
+  if(KPI_ROWS.some(function(k){return !k.name.trim();})){toast('Every KPI needs a name','err');return;}
+  var targets={};KPI_ROWS.forEach(function(k,i){targets['kpi'+i]=parseNum($('tgt'+i).value);});
+  var reward=$('cReward').value.trim()?{description:$('cReward').value.trim()}:null;
+  var btn=$('createBtn');btn.disabled=true;btn.innerHTML='<span class="ring"></span> Creating…';
+  try{await api('createCampaign',{method:'POST',body:{name:name,kpis:KPI_ROWS,startDate:start,endDate:end,offDays:offDaysList(),targets:targets,reward:reward}});toast('Campaign created ✓');hideCreate();await load();}catch(e){toast(e.message,'err');}
+  btn.disabled=false;btn.innerHTML='<i class="fas fa-check"></i> Create Campaign';
+}
+
+async function openCampaign(id){
+  CUR=CAMPAIGNS.find(function(c){return c.id===id;});
+  $('listView').classList.add('hidden');$('detailView').classList.remove('hidden');
+  $('crumbCamp').textContent=CUR.name;
+  var iSet=CUR.initiatorLevel==='district'||CUR.initiatorLevel==='ho';
+  $('targetsTabBtn').classList.remove('hidden');
+  await loadDetail();
+}
+function backToList(){$('detailView').classList.add('hidden');$('listView').classList.remove('hidden');load();}
+async function loadDetail(){
+  var d;try{d=await api('districtView',{qs:'campaignId='+CUR.id});}catch(e){toast(e.message,'err');return;}
+  $('dName').textContent=d.district.name;
+  $('statRow').innerHTML=
+    statCard('District Achievement',d.distAchieved.toFixed(1)+'%','Pace: '+d.distPct.toFixed(0)+'% '+paceTag(d.distPct),'gold',d.distAchieved,'gold')
+   +statCard('Branches',d.branchRows.length,'in this campaign')
+   +statCard('Campaign Days',d.campaign.days,'from '+d.campaign.startDate)
+   +statCard('Days Reported',d.elapsed,'of '+d.campaign.days);
+  $('kpiChipsBox').innerHTML='<div class="card"><div class="stit" style="margin-bottom:0"><div class="ico"><i class="fas fa-gauge"></i></div>KPI Pace (color-coded)</div>'+renderKpiChips(d.perKpi)+'</div>';
+  $('branchBox').innerHTML=d.branchRows.length?('<div class="tw"><table><thead><tr><th>#</th><th>Branch</th><th>Type</th><th class="num">Achieved</th><th class="num">Pace</th><th class="num">Days</th></tr></thead><tbody>'+d.branchRows.map(function(b,i){return '<tr><td><span class="rank '+rankCls(i)+'">'+(i+1)+'</span></td><td><b>'+b.name+'</b></td><td><span class="bdg bn">'+b.type+'</span></td><td class="num"><b>'+b.achieved.toFixed(1)+'%</b></td><td class="num"><span class="kchip '+kpiPctClass(b.pct)+'">'+b.pct.toFixed(0)+'%</span></td><td class="num">'+b.reportedDays+'</td></tr>';}).join('')+'</tbody></table></div>'):'<div class="empty"><i class="fas fa-store-slash"></i><div>No branches.</div></div>';
+  $('offBox').innerHTML=d.officerRows.length?('<div class="tw"><table><thead><tr><th>#</th><th>Staff</th><th>Branch</th><th class="num">Achieved</th><th class="num">Pace</th></tr></thead><tbody>'+d.officerRows.map(function(o,i){return '<tr><td><span class="rank '+rankCls(i)+'">'+(i+1)+'</span></td><td><b>'+o.name+'</b></td><td class="muted">'+o.branch+'</td><td class="num"><b>'+o.achieved.toFixed(1)+'%</b></td><td class="num"><span class="kchip '+kpiPctClass(o.pct)+'">'+o.pct.toFixed(0)+'%</span></td></tr>';}).join('')+'</tbody></table></div>'):'<div class="empty"><i class="fas fa-inbox"></i><div>No staff data yet.</div></div>';
+  $('grpBox').innerHTML=d.groupRows.length?('<div class="tw"><table><thead><tr><th>Support Officer</th><th class="num">Branches</th><th class="num">Achieved</th></tr></thead><tbody>'+d.groupRows.map(function(g){return '<tr><td><b>'+g.name+'</b></td><td class="num">'+g.branches+'</td><td class="num"><span class="kchip '+kpiPctClass(g.pct)+'">'+g.achieved.toFixed(1)+'%</span></td></tr>';}).join('')+'</tbody></table></div>'):'<div class="empty"><i class="fas fa-layer-group"></i><div>No support officers assigned.</div></div>';
+  await loadTargetsPane();
+}
+async function loadTargetsPane(){
+  var d;try{d=await api('targetsView',{qs:'campaignId='+CUR.id+'&level=branch'});}catch(e){$('targetsBox').innerHTML='<div class="empty"><i class="fas fa-lock"></i><div>Not available.</div></div>';return;}
+  $('targetsBox').innerHTML='<div class="muted" style="margin-bottom:8px">Your allocated target: '+d.keys.map(function(k,i){return d.campaign.kpis[i].name+': '+fmtVal(d.parentTarget[k],d.campaign.kpis[i].unit);}).join(' · ')+'</div>'
+   +'<div class="tw"><table><thead><tr><th>Branch</th>'+d.campaign.kpis.map(function(k){return '<th class="num">'+k.name+'</th>';}).join('')+'</tr></thead><tbody>'
+   +d.rows.map(function(r){return '<tr><td><b>'+r.name+'</b></td>'+d.keys.map(function(k){return '<td class="num">'+numInputHtml('data-b="'+r.id+'" data-k="'+k+'"',r.values[k]||0,'style="width:120px"')+'</td>';}).join('')+'</tr>';}).join('')
+   +'</tbody></table></div>';
+}
+async function saveBranchTargets(){
+  var rows={};document.querySelectorAll('#targetsBox input').forEach(function(inp){var b=inp.dataset.b,k=inp.dataset.k;if(!rows[b])rows[b]={branchId:b};rows[b][k]=parseNum(inp.value);});
+  var btn=$('saveTargetsBtn');btn.disabled=true;btn.innerHTML='<span class="ring"></span> Saving…';
+  try{var res=await api('setBranchTargets',{method:'POST',body:{campaignId:CUR.id,rows:Object.values(rows)}});toast('Targets saved ✓');
+    $('validationBox').innerHTML=res.validation.ok?'<div class="tip"><i class="fas fa-circle-check"></i> Branch totals match your allocated target for every KPI.</div>':'<div class="note">⚠ Not matching yet: '+res.validation.perKpi.filter(function(p){return !p.matches;}).map(function(p){return p.key+' (sum '+fmt(p.sum)+' vs '+fmt(p.target)+')';}).join(', ')+'</div>';
+  }catch(e){toast(e.message,'err');}
+  btn.disabled=false;btn.innerHTML='<i class="fas fa-floppy-disk"></i> Save Targets';
+}
+function dtab(name,btn){document.querySelectorAll('#detailView .tab').forEach(function(t){t.classList.remove('active');});btn.classList.add('active');document.querySelectorAll('#detailView .pane').forEach(function(p){p.classList.remove('active');});$('pane-'+name).classList.add('active');if(name==='reports')loadReport();}
+var LASTREP=null;
+async function loadReport(){
+  var period=$('repPeriod').value;
+  $('weekWrap').classList.toggle('hidden',period!=='weekly');
+  $('monthWrap').classList.toggle('hidden',period!=='monthly');
+  $('dayWrap').classList.toggle('hidden',period!=='daily');
+  var qs='campaignId='+CUR.id+'&period='+period;
+  if(period==='weekly')qs+='&week='+$('repWeek').value;
+  if(period==='monthly'){if(!$('repMonth').value)$('repMonth').value=defaultReportMonth(CUR);qs+='&month='+$('repMonth').value;}
+  if(period==='daily')qs+='&day='+($('repDay').value||'');
+  try{var r=await api('report',{qs:qs});}catch(e){toast(e.message,'err');return;}
+  LASTREP=r;
+  if(period==='daily'&&$('repDay').options.length===0){if(r.dates&&r.dates.length){$('repDay').innerHTML=r.dates.map(function(d){return '<option value="'+d+'">'+d+'</option>';}).join('');$('repDay').value=r.dates[r.dates.length-1];return loadReport();}else $('repDay').innerHTML='<option value="">— no data —</option>';}
+  $('xlsBtn').disabled=false;$('pdfBtn').disabled=false;
+  var label=period==='weekly'?('Week '+r.week+' (through '+r.asOfDate+')'):(period==='daily'?('Day '+(r.day||'—')):(period==='monthly'?(r.month+' (through '+r.asOfDate+')'):('Whole campaign (through '+r.asOfDate+')')));
+  var cum=r.cumulative;
+  var cumBox='<div class="card" style="background:var(--s2);box-shadow:none;margin-bottom:14px">'
+    +'<div class="stit" style="margin-bottom:2px"><div class="ico g"><i class="fas fa-layer-group"></i></div>Cumulative to date</div>'
+    +'<div class="sdesc">Cumulative actual vs. cumulative plan, from campaign start through '+r.asOfDate+'.</div>'
+    +'<div class="sg c2" style="margin-bottom:8px">'
+      +statCard('Cumulative Achieved',cum.achieved.toFixed(1)+'%','vs full target','gold',cum.achieved,'gold')
+      +statCard('Cumulative Pace',cum.pct.toFixed(0)+'%',paceTag(cum.pct))
+    +'</div>'
+    +renderKpiTableCumulative(cum)
+    +'</div>';
+  var sum='<div class="sg c3" style="margin-bottom:14px">'+r.kpis.map(function(k,i){var v=r.totals['kpi'+i]||0;return statCard(k.name,fmtVal(v,k.unit),'this period');}).join('')+'</div>';
+  var trend=r.trend.length?('<div class="tw"><table><thead><tr><th>Date</th>'+r.kpis.map(function(k){return '<th class="num">'+k.name+'</th>';}).join('')+'</tr></thead><tbody>'+r.trend.map(function(t){return '<tr><td><b>'+t.date+'</b></td>'+r.kpis.map(function(k,i){return '<td class="num">'+fmtVal(t.totals['kpi'+i]||0,k.unit)+'</td>';}).join('')+'</tr>';}).join('')+'</tbody></table></div>'):'<div class="empty"><i class="fas fa-inbox"></i><div>No approved data for this period.</div></div>';
+  $('reportBox').innerHTML='<div class="muted" style="margin-bottom:10px">'+r.title+' · '+label+'</div>'+cumBox+'<div class="stit" style="margin-bottom:2px"><div class="ico"><i class="fas fa-calendar-day"></i></div>This period only</div>'+sum+trend;
+}
+
+// ---- officer management ----
+async function loadOfficers(){var d;try{d=await api('listOfficers');}catch(e){toast(e.message,'err');return;}OFFICERS=d.officers;renderOfficerList();}
+function renderOfficerList(){
+  if(!OFFICERS.length){$('officerListBox').innerHTML='<div class="empty"><i class="fas fa-user-shield"></i><div>No officers yet.</div></div>';return;}
+  $('officerListBox').innerHTML='<div class="tw"><table><thead><tr><th>Name/ID</th><th>Status</th><th>Password</th><th>Assigned Branches</th><th style="text-align:right">Actions</th></tr></thead><tbody>'
+   +OFFICERS.map(function(o){return '<tr><td><b>'+o.name+'</b></td><td>'+(o.active?'<span class="bdg bx">Active</span>':'<span class="bdg bl">Deactivated</span>')+'</td><td>'+(o.mustChangePassword?'<span class="bdg bf">Not signed in yet</span>':'<span class="bdg bn">Set</span>')+'</td><td class="muted">'+(o.branchIds.length?(o.branchIds.length+' branch(es)'):'none assigned')+'</td><td style="text-align:right"><button class="btn bo bsm" onclick="editOfficerBranches(\''+o.id+'\')" title="Assign branches"><i class="fas fa-map-pin"></i></button> <button class="btn bo bsm" onclick="resetOfPw(\''+o.id+'\')" title="Reset password"><i class="fas fa-key"></i></button> <button class="btn bo bsm" onclick="toggleOfActive(\''+o.id+'\','+(!o.active)+')" title="Toggle"><i class="fas fa-'+(o.active?'user-slash':'user-check')+'"></i></button></td></tr>';}).join('')
+   +'</tbody></table></div>';
+}
+async function addOfficer(){
+  var name=$('newOfName').value.trim();if(!name){toast('Enter a name or ID','err');return;}
+  try{var r=await api('addOfficer',{method:'POST',body:{name:name}});$('newOfName').value='';
+    $('genPwBox').innerHTML='<div class="tip" style="margin-top:12px"><i class="fas fa-key"></i> <b>'+r.officer.name+'</b> temporary password: <code style="background:var(--s3);padding:2px 8px;border-radius:6px;font-weight:800">'+r.generatedPassword+'</code> <button class="btn bo bsm" onclick="navigator.clipboard.writeText(\''+r.generatedPassword+'\');toast(\'Copied\')"><i class="fas fa-copy"></i> Copy</button></div>';
+    toast('Officer added ✓');await loadOfficers();
+  }catch(e){toast(e.message,'err');}
+}
+async function resetOfPw(id){try{var r=await api('resetOfficerPassword',{method:'POST',body:{officerId:id}});$('genPwBox').innerHTML='<div class="tip" style="margin-top:12px"><i class="fas fa-key"></i> New password: <code style="background:var(--s3);padding:2px 8px;border-radius:6px;font-weight:800">'+r.generatedPassword+'</code></div>';toast('Password reset ✓');await loadOfficers();}catch(e){toast(e.message,'err');}}
+async function toggleOfActive(id,active){try{await api('setOfficerActive',{method:'POST',body:{officerId:id,active:active}});toast(active?'Reactivated':'Deactivated');await loadOfficers();}catch(e){toast(e.message,'err');}}
+async function editOfficerBranches(id){
+  var of=OFFICERS.find(function(o){return o.id===id;});
+  if(!window.DIRCACHE)window.DIRCACHE=await (await fetch(API+'/directory')).json();
+  var mine=window.DIRCACHE.branches.filter(function(b){return b.districtId===S.scopeId;});
+  var checked=of.branchIds||[];
+  var html='<div class="modalcard" style="width:400px;max-height:70vh;overflow-y:auto"><div class="stit"><div class="ico g"><i class="fas fa-map-pin"></i></div>Assign Branches to '+of.name+'</div>'
+   +mine.map(function(b){return '<label style="display:flex;align-items:center;gap:8px;padding:6px 0"><input type="checkbox" value="'+b.id+'" '+(checked.includes(b.id)?'checked':'')+'> '+b.name+'</label>';}).join('')
+   +'<div class="row" style="margin-top:14px;justify-content:flex-end"><button class="btn bo bsm" onclick="closeOfficerModal()">Cancel</button><button class="btn bg bsm" onclick="saveOfficerBranches(\''+id+'\')">Save</button></div></div>';
+  var m=el('div','modal');m.id='ofModal';m.innerHTML=html;document.body.appendChild(m);
+}
+function closeOfficerModal(){var m=$('ofModal');if(m)m.remove();}
+async function saveOfficerBranches(id){
+  var ids=[];document.querySelectorAll('#ofModal input[type=checkbox]:checked').forEach(function(c){ids.push(c.value);});
+  try{await api('setOfficerBranches',{method:'POST',body:{officerId:id,branchIds:ids}});toast('Branches assigned ✓');closeOfficerModal();await loadOfficers();}catch(e){toast(e.message,'err');}
+}
+
+// ---- feedback overview ----
+async function loadFeedback(){
+  var d;try{d=await api('listFeedback');}catch(e){toast(e.message,'err');return;}
+  $('feedbackBox').innerHTML=d.feedback.length?d.feedback.map(function(f){return '<div class="feeditem"><div class="row" style="justify-content:space-between"><b>'+f.branchName+(f.staffName?(' · '+f.staffName):'')+'</b><span class="muted" style="font-size:.72rem">'+new Date(f.createdAt).toLocaleDateString()+'</span></div>'
+   +f.thread.map(function(m){return '<div class="feedmsg by'+m.by+'"><span class="who">'+m.name+'</span> — '+m.message+'</div>';}).join('')+'</div>';}).join(''):'<div class="empty"><i class="fas fa-comments"></i><div>No feedback yet.</div></div>';
+}
+load();
+</script>
+</body>
+</html>

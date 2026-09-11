@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>BoA Campaigns · Staff</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+<div id="hdr"></div>
+<div class="wrap">
+  <div id="pwGate" class="hidden">
+    <div class="hero"><div class="hbadge"><i class="fas fa-key"></i> First Sign-In</div><h1>Set Your Password</h1><p>Choose your own password before continuing.</p></div>
+    <div class="card" style="max-width:420px">
+      <div style="margin-top:4px"><label>New Password</label><input type="password" id="newPw" placeholder="••••••••"></div>
+      <div style="margin-top:10px"><label>Confirm Password</label><input type="password" id="newPw2" placeholder="••••••••" onkeydown="if(event.key==='Enter')setPassword()"></div>
+      <div style="margin-top:14px"><button class="btn bg" id="setPwBtn" onclick="setPassword()"><i class="fas fa-check"></i> Set Password &amp; Continue</button></div>
+    </div>
+  </div>
+
+  <div id="main" class="hidden">
+    <div class="hero"><div class="hbadge"><i class="fas fa-user"></i> Staff</div><h1 id="stName">Staff</h1><p id="stSub">Pick a campaign to enter today's numbers.</p></div>
+
+    <div id="campListView">
+      <div class="card"><div class="stit"><div class="ico g"><i class="fas fa-flag"></i></div>My Campaigns</div><div id="campListBox" style="margin-top:12px"></div></div>
+    </div>
+
+    <div id="campDetailView" class="hidden">
+      <div class="crumb"><a onclick="backToList()"><i class="fas fa-arrow-left"></i> My campaigns</a> <i class="fas fa-chevron-right"></i> <span id="crumbCamp" class="campname"></span></div>
+      <div class="sg c4" id="statRow"></div>
+      <div id="kpiChipsBox"></div>
+      <div class="tabs">
+        <button class="tab active" onclick="tab('entry',this)"><i class="fas fa-pen-to-square"></i> Daily Entry</button>
+        <button class="tab" onclick="tab('mine',this)"><i class="fas fa-list-check"></i> My Submissions</button>
+        <button class="tab" onclick="tab('myplan',this)"><i class="fas fa-calendar-check"></i> My Plan</button>
+        <button class="tab" onclick="tab('feedback',this)"><i class="fas fa-comments"></i> Feedback</button>
+      </div>
+      <div class="pane active" id="pane-entry"><div class="card">
+        <div class="stit"><div class="ico g"><i class="fas fa-pen-to-square"></i></div>Today's Entry</div>
+        <div class="sdesc">Today's increment only. Your manager reviews and approves before it counts.</div>
+        <div class="row" style="margin-bottom:12px"><div style="max-width:190px"><label>Date</label><input type="date" id="entryDate"></div></div>
+        <div id="kpiInputs" class="sg c3"></div>
+        <div class="card" style="margin-top:14px;background:var(--s2);box-shadow:none">
+          <div class="stit" style="font-size:.85rem"><div class="ico"><i class="fas fa-route"></i></div>Field Visits <span class="muted" style="font-weight:500">(optional)</span></div>
+          <div id="visitRows"></div>
+          <button class="btn bo bsm" type="button" onclick="addVisit()" style="margin-top:8px"><i class="fas fa-plus"></i> Add Visit</button>
+        </div>
+        <div style="margin-top:14px"><label>Remark</label><input type="text" id="remark" placeholder="e.g. outreach, public holiday…"></div>
+        <div style="margin-top:14px"><button class="btn bg" id="saveBtn" onclick="saveEntry()"><i class="fas fa-cloud-arrow-up"></i> Submit for Approval</button></div>
+      </div></div>
+      <div class="pane" id="pane-mine"><div class="card"><div class="stit"><div class="ico g"><i class="fas fa-list-check"></i></div>My Submissions</div><div id="mineBox"></div></div></div>
+      <div class="pane" id="pane-myplan"><div class="card"><div class="stit"><div class="ico g"><i class="fas fa-calendar-check"></i></div>My Plan</div><div class="sdesc">What you should aim for today, this week, this month, and overall.</div><div id="planBox"></div></div></div>
+      <div class="pane" id="pane-feedback"><div class="card"><div class="stit"><div class="ico g"><i class="fas fa-comments"></i></div>Feedback</div><div id="feedbackBox"></div></div></div>
+    </div>
+  </div>
+</div>
+<div id="toast"></div>
+<script src="app.js"></script>
+<script>
+var S=requireRole('staff'),CAMPAIGNS=[],CUR=null,VIEW=null;
+document.getElementById('hdr').innerHTML=renderHeader('Staff','fas fa-user');
+function statCard(label,val,sub,cls,pctv,fillcls){var bar=pctv!=null?'<div class="pbar"><div class="pfill '+(fillcls||'')+'" style="width:'+Math.min(100,pctv)+'%"></div></div>':'';return '<div class="sc '+(cls||'')+'"><div class="sv">'+val+'</div><div class="sl">'+label+'</div><div class="sx">'+(sub||'')+'</div>'+bar+'</div>';}
+
+async function setPassword(){
+  var p1=$('newPw').value,p2=$('newPw2').value;
+  if(!p1||p1.length<4){toast('Password must be at least 4 characters','err');return;}
+  if(p1!==p2){toast('Passwords do not match','err');return;}
+  var btn=$('setPwBtn');btn.disabled=true;btn.innerHTML='<span class="ring"></span> Saving…';
+  try{await api('changeMyPassword',{method:'POST',body:{password:p1}});var s=getSession();s.mustChangePassword=false;saveSession(s);toast('Password set ✓');$('pwGate').classList.add('hidden');$('main').classList.remove('hidden');loadCampaigns();}catch(e){toast(e.message,'err');}
+  btn.disabled=false;btn.innerHTML='<i class="fas fa-check"></i> Set Password & Continue';
+}
+async function loadCampaigns(){
+  try{CAMPAIGNS=(await api('listCampaigns')).campaigns;}catch(e){toast(e.message,'err');return;}
+  $('campListBox').innerHTML=groupedCampaignListHtml(CAMPAIGNS);
+}
+function tab(name,btn){document.querySelectorAll('#campDetailView .tab').forEach(function(t){t.classList.remove('active');});btn.classList.add('active');document.querySelectorAll('#campDetailView .pane').forEach(function(p){p.classList.remove('active');});$('pane-'+name).classList.add('active');if(name==='mine')loadMine();if(name==='feedback')loadFeedback();if(name==='myplan')loadMyPlan();}
+async function loadMyPlan(){
+  var p;try{p=await api('myPlan',{qs:'campaignId='+CUR.id});}catch(e){$('planBox').innerHTML='';return;}
+  $('planBox').innerHTML=renderPlanGrid(p);
+}
+async function openCampaign(id){
+  CUR=CAMPAIGNS.find(function(c){return c.id===id;});
+  $('campListView').classList.add('hidden');$('campDetailView').classList.remove('hidden');
+  $('crumbCamp').textContent=CUR.name;
+  await load();
+}
+function backToList(){$('campDetailView').classList.add('hidden');$('campListView').classList.remove('hidden');loadCampaigns();}
+
+async function load(){
+  try{VIEW=await api('staffView',{qs:'campaignId='+CUR.id});}catch(e){toast(e.message,'err');return;}
+  $('stName').textContent=VIEW.staffName;
+  $('statRow').innerHTML=
+    statCard('My Achievement',VIEW.achieved.toFixed(1)+'%','Pace: '+VIEW.pct.toFixed(0)+'% '+paceTag(VIEW.pct),'gold',VIEW.achieved,'gold')
+   +statCard('Pending Review',fmt(VIEW.pendingCount),VIEW.pendingCount?'awaiting your manager':'all caught up')
+   +statCard('Campaign Days',VIEW.campaign.days,'from '+VIEW.campaign.startDate)
+   +statCard('Days I Reported',VIEW.elapsed,'approved days');
+  $('kpiChipsBox').innerHTML='<div class="card"><div class="stit" style="margin-bottom:0"><div class="ico"><i class="fas fa-gauge"></i></div>My KPI Pace (color-coded)</div>'+renderKpiChips(VIEW.perKpi)+'</div>';
+  renderInputs();
+  $('entryDate').value=new Date().toISOString().slice(0,10);
+}
+function renderInputs(){
+  $('kpiInputs').innerHTML=VIEW.campaign.kpis.map(function(k,i){
+    return '<div><label>'+k.name+(k.unit==='ETB'?' <span class="muted">(ETB)</span>':'')+'</label>'+numInputHtml('id="kpi_'+i+'"',0,'')+'</div>';
+  }).join('');
+  $('visitRows').innerHTML='';
+}
+var visitSeq=0;
+function addVisit(){var id='v'+(visitSeq++);var row=el('div','card');row.id=id;row.style.cssText='background:var(--s);padding:11px;margin-bottom:8px';
+  row.innerHTML='<div class="sg c2" style="gap:9px;margin:0"><div><label>Account No.</label><input id="'+id+'_acct" placeholder="e.g. 1000123456"></div><div><label>Customer Name</label><input id="'+id+'_cust" placeholder="Full name"></div><div><label>Expected Outcome</label><input id="'+id+'_out" placeholder="e.g. open payroll account"></div><div><label>Expected Date</label><input type="date" id="'+id+'_date"></div></div><div style="text-align:right;margin-top:6px"><button type="button" class="btn bo bsm" onclick="this.closest(\'.card\').remove()"><i class="fas fa-trash"></i> Remove</button></div>';
+  $('visitRows').appendChild(row);}
+function collectVisits(){var out=[];[].slice.call($('visitRows').children).forEach(function(row){var id=row.id;var a=($(id+'_acct')||{}).value||'',c=($(id+'_cust')||{}).value||'',o=($(id+'_out')||{}).value||'',d=($(id+'_date')||{}).value||'';if(a.trim()||c.trim())out.push({account:a.trim(),customer:c.trim(),outcome:o.trim(),date:d});});return out;}
+async function saveEntry(){
+  var date=$('entryDate').value;if(!date){toast('Pick a date','err');return;}
+  var values={};VIEW.campaign.kpis.forEach(function(k,i){values['kpi'+i]=parseNum($('kpi_'+i).value);});
+  var btn=$('saveBtn');btn.disabled=true;btn.innerHTML='<span class="ring"></span> Submitting…';
+  try{await api('submitEntry',{method:'POST',body:{campaignId:CUR.id,date:date,values:values,visits:collectVisits(),remark:$('remark').value}});toast('Submitted — awaiting approval ✓');$('remark').value='';$('visitRows').innerHTML='';await load();}catch(e){toast(e.message,'err');}
+  btn.disabled=false;btn.innerHTML='<i class="fas fa-cloud-arrow-up"></i> Submit for Approval';
+}
+function statusBadge(s){if(s==='approved')return '<span class="bdg bx">Approved</span>';if(s==='rejected')return '<span class="bdg bl">Rejected</span>';return '<span class="bdg bf">Pending</span>';}
+async function loadMine(){
+  var d;try{d=await api('myEntries',{qs:'campaignId='+CUR.id});}catch(e){toast(e.message,'err');return;}
+  var es=d.entries;
+  if(!es.length){$('mineBox').innerHTML='<div class="empty"><i class="fas fa-inbox"></i><div>No submissions yet.</div></div>';return;}
+  $('mineBox').innerHTML='<div class="tw"><table><thead><tr><th>Date</th><th>Status</th><th class="num">'+VIEW.campaign.kpis[0].name+'</th><th>Note</th></tr></thead><tbody>'
+   +es.map(function(e){var note=e.status==='rejected'?('<span class="muted">'+(e.rejectReason||'—')+'</span>'):(e.remark||'—');
+     return '<tr><td><b>'+e.date+'</b></td><td>'+statusBadge(e.status)+'</td><td class="num">'+fmtVal((e.values&&e.values.kpi0)||0,VIEW.campaign.kpis[0].unit)+'</td><td class="muted">'+note+'</td></tr>';}).join('')
+   +'</tbody></table></div>';
+}
+async function loadFeedback(){
+  var d;try{d=await api('listFeedback');}catch(e){toast(e.message,'err');return;}
+  if(!d.feedback.length){$('feedbackBox').innerHTML='<div class="empty"><i class="fas fa-comments"></i><div>No feedback yet.</div></div>';return;}
+  $('feedbackBox').innerHTML=d.feedback.map(function(f){
+    var rid='fb_'+f.id;
+    return '<div class="feeditem">'+f.thread.map(function(m){return '<div class="feedmsg by'+m.by+'"><span class="who">'+m.name+'</span> — '+m.message+'</div>';}).join('')
+     +'<div class="row" style="margin-top:8px;gap:8px"><input id="'+rid+'_reply" placeholder="Write a reply…" style="flex:1"><button class="btn bg bsm" onclick="sendReply(\''+f.id+'\',\''+f.districtId+'\',\''+rid+'\')"><i class="fas fa-reply"></i> Reply</button></div></div>';
+  }).join('');
+}
+async function sendReply(feedbackId,districtId,rid){
+  var msg=$(rid+'_reply').value.trim();if(!msg){toast('Write a reply first','err');return;}
+  try{await api('replyFeedback',{method:'POST',body:{feedbackId:feedbackId,districtId:districtId,message:msg}});toast('Reply sent ✓');await loadFeedback();}catch(e){toast(e.message,'err');}
+}
+
+if(S){ if(S.mustChangePassword){$('pwGate').classList.remove('hidden');} else {$('main').classList.remove('hidden');loadCampaigns();} }
+</script>
+</body>
+</html>

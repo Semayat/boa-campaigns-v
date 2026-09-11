@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>BoA Campaigns · Branch</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+<div id="hdr"></div>
+<div class="wrap">
+  <div class="hero"><div class="hbadge"><i class="fas fa-store"></i> Branch</div><h1 id="brName">Branch</h1><p>Campaigns, staff, approvals, and feedback.</p></div>
+
+  <div class="tabs">
+    <button class="tab active" onclick="mtab('campaigns',this)"><i class="fas fa-flag"></i> Campaigns</button>
+    <button class="tab" onclick="mtab('staff',this)"><i class="fas fa-users"></i> Staff</button>
+    <button class="tab" onclick="mtab('feedback',this)"><i class="fas fa-comments"></i> Feedback</button>
+  </div>
+
+  <div class="pane active" id="pane-campaigns">
+    <div id="listView"><div class="card"><div class="row" style="justify-content:space-between;align-items:center">
+      <div class="stit"><div class="ico g"><i class="fas fa-flag"></i></div>Campaigns</div>
+      <button class="btn bg bsm" onclick="showCreate()"><i class="fas fa-plus"></i> Start Local Campaign</button>
+    </div><div id="campListBox" style="margin-top:12px"></div></div></div>
+
+    <div id="createView" class="hidden"><div class="card">
+      <div class="stit"><div class="ico g"><i class="fas fa-flag"></i></div>Start a Branch Campaign</div>
+      <div class="sdesc">A local campaign just for this branch's staff.</div>
+      <div style="margin-top:10px"><label>Campaign Name</label><input id="cName" placeholder="e.g. Sealite Local Referral Push"></div>
+      <div class="row" style="margin-top:10px"><div style="flex:1"><label>Start Date</label><input type="date" id="cStart" onchange="renderCalPreview()"></div><div style="flex:1"><label>End Date</label><input type="date" id="cEnd" onchange="renderCalPreview()"></div></div>
+      <div style="margin-top:14px"><label>Campaign Calendar — click to exclude off days</label><div id="calBox"></div></div>
+      <div style="margin-top:14px"><label>KPIs &amp; Weights</label><div id="kpiRows"></div><button type="button" class="btn bo bsm" onclick="kpiRowAddB()"><i class="fas fa-plus"></i> Add KPI</button><span class="muted" style="margin-left:10px">Total weight: <b id="kpiWeightTotal">0</b>%</span></div>
+      <div style="margin-top:14px"><label>Branch Target per KPI</label><div id="targetInputs"></div></div>
+      <div style="margin-top:14px"><label>Reward (optional)</label><input id="cReward" placeholder="optional"></div>
+      <div class="row" style="margin-top:16px;justify-content:flex-end"><button class="btn bo bsm" onclick="hideCreate()">Cancel</button><button class="btn bg bsm" id="createBtn" onclick="createCampaign()"><i class="fas fa-check"></i> Create Campaign</button></div>
+    </div></div>
+
+    <div id="detailView" class="hidden">
+      <div class="crumb"><a onclick="backToList()"><i class="fas fa-arrow-left"></i> All campaigns</a> <i class="fas fa-chevron-right"></i> <span id="crumbCamp" class="campname"></span></div>
+      <div class="sg c4" id="statRow"></div>
+      <div id="targetBox"></div>
+      <div id="kpiChipsBox"></div>
+      <div class="tabs">
+        <button class="tab active" onclick="dtab('approvals',this)"><i class="fas fa-clipboard-check"></i> Approvals <span id="pendBadge"></span></button>
+        <button class="tab" onclick="dtab('ranking',this)"><i class="fas fa-ranking-star"></i> Staff Ranking</button>
+        <button class="tab" onclick="dtab('targets',this)"><i class="fas fa-bullseye"></i> Set Staff Targets</button>
+        <button class="tab" onclick="dtab('myplan',this)"><i class="fas fa-calendar-check"></i> My Plan</button>
+        <button class="tab" onclick="dtab('reports',this)"><i class="fas fa-chart-line"></i> Reports</button>
+      </div>
+      <div class="pane active" id="pane-approvals"><div class="card"><div id="approvalsBox"></div></div></div>
+      <div class="pane" id="pane-ranking"><div class="card"><div id="offRankBox"></div></div></div>
+      <div class="pane" id="pane-targets"><div class="card">
+        <div class="stit"><div class="ico g"><i class="fas fa-bullseye"></i></div>Set Staff Targets</div>
+        <div class="sdesc">Distribute your target across your staff. Sum should equal your branch's target per KPI. Individual shares do not need to be equal.</div>
+        <div id="targetsBox"></div>
+        <div class="row" style="margin-top:12px;justify-content:flex-end"><button class="btn bg bsm" id="saveTargetsBtn" onclick="saveStaffTargets()"><i class="fas fa-floppy-disk"></i> Save Targets</button></div>
+        <div id="validationBox" style="margin-top:10px"></div>
+      </div></div>
+      <div class="pane" id="pane-myplan"><div class="card">
+        <div class="stit"><div class="ico g"><i class="fas fa-calendar-check"></i></div>My Plan</div>
+        <div class="sdesc">What your branch should aim for today, this week, this month, and overall.</div>
+        <div id="planBox"></div>
+      </div></div>
+      <div class="pane" id="pane-reports"><div class="card">
+        <div class="row" style="margin:8px 0 14px"><div style="max-width:150px"><label>Period</label><select id="repPeriod" onchange="loadReport()"><option value="grand">Grand (whole campaign)</option><option value="monthly" selected>Monthly</option><option value="weekly">Weekly</option><option value="daily">Daily</option></select></div><div style="max-width:150px" id="weekWrap" class="hidden"><label>Week</label><select id="repWeek" onchange="loadReport()"><option value="1">Week 1</option><option value="2">Week 2</option><option value="3">Week 3</option><option value="4">Week 4</option><option value="5">Week 5</option><option value="6">Week 6</option></select></div><div style="max-width:170px" id="monthWrap" class="hidden"><label>Month</label><input type="month" id="repMonth" onchange="loadReport()"></div><div style="max-width:170px" id="dayWrap" class="hidden"><label>Day</label><select id="repDay" onchange="loadReport()"></select></div><div style="flex:1"></div><button class="btn bo bsm" id="xlsBtn" onclick="exportReportExcel(LASTREP)" disabled><i class="fas fa-file-excel"></i> Excel</button><button class="btn bo bsm" id="pdfBtn" onclick="exportReportPDF(LASTREP)" disabled><i class="fas fa-file-pdf"></i> PDF</button></div>
+        <div id="reportBox"></div>
+      </div></div>
+    </div>
+  </div>
+
+  <div class="pane" id="pane-staff">
+    <div class="card">
+      <div class="stit"><div class="ico g"><i class="fas fa-user-plus"></i></div>Add Staff</div>
+      <div class="sdesc">The system generates a temporary password for you to share with them.</div>
+      <div class="row" style="margin-top:8px"><input id="newStaffName" placeholder="e.g. Abebe Bikila or EMP-0231" style="max-width:280px" onkeydown="if(event.key==='Enter')addStaff()"><button class="btn bg bsm" onclick="addStaff()"><i class="fas fa-plus"></i> Add Staff</button></div>
+      <div id="genPwBox"></div>
+    </div>
+    <div class="card"><div class="stit"><div class="ico"><i class="fas fa-users"></i></div>Staff Accounts</div><div id="staffBox"></div></div>
+  </div>
+
+  <div class="pane" id="pane-feedback">
+    <div class="card"><div class="stit"><div class="ico g"><i class="fas fa-comments"></i></div>Feedback From Your District Officer</div><div class="sdesc">Reply with an explanation or update where needed.</div><div id="feedbackBox"></div></div>
+  </div>
+</div>
+<div id="toast"></div>
+<script src="app.js"></script>
+<script>
+var S=requireRole('branch'),CAMPAIGNS=[],CUR=null,STAFFLIST=[];
+document.getElementById('hdr').innerHTML=renderHeader('Branch','fas fa-store');
+function statCard(label,val,sub,cls,pctv,fillcls){var bar=pctv!=null?'<div class="pbar"><div class="pfill '+(fillcls||'')+'" style="width:'+Math.min(100,pctv)+'%"></div></div>':'';return '<div class="sc '+(cls||'')+'"><div class="sv">'+val+'</div><div class="sl">'+label+'</div><div class="sx">'+(sub||'')+'</div>'+bar+'</div>';}
+function mtab(name,btn){document.querySelectorAll('.wrap>.tabs>.tab').forEach(function(t){t.classList.remove('active');});btn.classList.add('active');['campaigns','staff','feedback'].forEach(function(n){$('pane-'+n).classList.toggle('active',n===name);});if(name==='staff')loadStaff();if(name==='feedback')loadFeedback();}
+
+async function load(){
+  try{CAMPAIGNS=(await api('listCampaigns')).campaigns;}catch(e){toast(e.message,'err');return;}
+  $('campListBox').innerHTML=groupedCampaignListHtml(CAMPAIGNS);
+}
+function showCreate(){$('listView').classList.add('hidden');$('createView').classList.remove('hidden');kpiRowsInit([{name:'',unit:'count',weight:100}]);renderTargetInputsB();offDaysInit([]);$('calBox').innerHTML='<div class="muted" style="font-size:.78rem">Pick start and end dates to see the calendar.</div>';}
+function hideCreate(){$('createView').classList.add('hidden');$('listView').classList.remove('hidden');}
+function renderCalPreview(){offDaysRender($('cStart').value,$('cEnd').value,'calBox');}
+function renderTargetInputsB(){$('targetInputs').innerHTML=KPI_ROWS.map(function(k,i){return '<div class="row" style="gap:8px;margin-bottom:6px"><span class="muted" style="min-width:160px">'+(k.name||('KPI '+(i+1)))+'</span>'+numInputHtml('id="tgt'+i+'"',0,'style="flex:1"')+'</div>';}).join('');}
+function kpiRowAddB(){kpiRowAdd();renderTargetInputsB();}
+var _oku2=kpiRowUpdate; kpiRowUpdate=function(i,f,v){_oku2(i,f,v);renderTargetInputsB();};
+var _okr2=kpiRowRemove; kpiRowRemove=function(i){_okr2(i);renderTargetInputsB();};
+
+async function createCampaign(){
+  var name=$('cName').value.trim(),start=$('cStart').value,end=$('cEnd').value;
+  if(!name||!start||!end){toast('Fill in name and dates','err');return;}
+  if(end<start){toast('End date must be after start date','err');return;}
+  var w=KPI_ROWS.reduce(function(s,k){return s+(+k.weight||0);},0);
+  if(w!==100){toast('KPI weights must total 100% (now '+w+'%)','err');return;}
+  if(KPI_ROWS.some(function(k){return !k.name.trim();})){toast('Every KPI needs a name','err');return;}
+  var targets={};KPI_ROWS.forEach(function(k,i){targets['kpi'+i]=parseNum($('tgt'+i).value);});
+  var reward=$('cReward').value.trim()?{description:$('cReward').value.trim()}:null;
+  var btn=$('createBtn');btn.disabled=true;btn.innerHTML='<span class="ring"></span> Creating…';
+  try{await api('createCampaign',{method:'POST',body:{name:name,kpis:KPI_ROWS,startDate:start,endDate:end,offDays:offDaysList(),targets:targets,reward:reward}});toast('Campaign created ✓');hideCreate();await load();}catch(e){toast(e.message,'err');}
+  btn.disabled=false;btn.innerHTML='<i class="fas fa-check"></i> Create Campaign';
+}
+
+async function openCampaign(id){
+  CUR=CAMPAIGNS.find(function(c){return c.id===id;});
+  $('listView').classList.add('hidden');$('detailView').classList.remove('hidden');
+  $('crumbCamp').textContent=CUR.name;
+  await loadDetail();
+}
+function backToList(){$('detailView').classList.add('hidden');$('listView').classList.remove('hidden');load();}
+async function loadDetail(){
+  var d;try{d=await api('branchView',{qs:'campaignId='+CUR.id});}catch(e){toast(e.message,'err');return;}
+  $('brName').textContent=d.branch.name;
+  $('statRow').innerHTML=
+    statCard('Overall Achievement',d.achieved.toFixed(1)+'%','Pace: '+d.pct.toFixed(0)+'% '+paceTag(d.pct),'gold',d.achieved,'gold')
+   +statCard('Active Staff',d.staffCount,'sharing this target')
+   +statCard('Campaign Days',d.campaign.days,'from '+d.campaign.startDate)
+   +statCard('Days Reported',d.elapsed,'of '+d.campaign.days);
+  $('targetBox').innerHTML='<div class="card" style="background:var(--s2);box-shadow:none"><div class="stit" style="margin-bottom:6px;font-size:.85rem"><div class="ico"><i class="fas fa-bullseye"></i></div>Your Target for This Campaign</div>'
+   +'<div class="row" style="flex-wrap:wrap;gap:8px">'+d.perKpi.map(function(k){return '<span class="pill">'+k.name+': <b>'+fmtVal(k.target,k.unit)+'</b></span>';}).join('')+'</div></div>';
+  $('kpiChipsBox').innerHTML='<div class="card"><div class="stit" style="margin-bottom:0"><div class="ico"><i class="fas fa-gauge"></i></div>KPI Pace (color-coded)</div>'+renderKpiChips(d.perKpi)+'</div>';
+  $('offRankBox').innerHTML=d.officers.length?('<div class="tw"><table><thead><tr><th>#</th><th>Staff</th><th class="num">Achieved</th><th class="num">Pace</th></tr></thead><tbody>'+d.officers.map(function(o,i){return '<tr><td><span class="rank '+rankCls(i)+'">'+(i+1)+'</span></td><td><b>'+o.name+'</b></td><td class="num"><b>'+o.achieved.toFixed(1)+'%</b></td><td class="num"><span class="kchip '+kpiPctClass(o.pct)+'">'+o.pct.toFixed(0)+'%</span></td></tr>';}).join('')+'</tbody></table></div>'):'<div class="empty"><i class="fas fa-inbox"></i><div>No approved data yet.</div></div>';
+  await loadApprovals();
+  await loadTargetsPane();
+  await loadMyPlan();
+}
+async function loadMyPlan(){
+  var p;try{p=await api('myPlan',{qs:'campaignId='+CUR.id});}catch(e){$('planBox').innerHTML='';return;}
+  $('planBox').innerHTML=renderPlanGrid(p);
+}
+async function loadApprovals(){
+  var d;try{d=await api('pendingApprovals',{qs:'campaignId='+CUR.id});}catch(e){return;}
+  $('pendBadge').textContent=d.pending.length?(' ('+d.pending.length+')'):'';
+  if(!d.pending.length){$('approvalsBox').innerHTML='<div class="empty"><i class="fas fa-circle-check"></i><div>All caught up.</div></div>';return;}
+  $('approvalsBox').innerHTML=d.pending.map(function(e){
+    var kpiLine=d.kpis.map(function(k,i){var v=(e.values&&e.values['kpi'+i])||0;return '<span class="pill">'+k.name+': '+fmtVal(v,k.unit)+'</span>';}).join(' ');
+    var remark=e.remark?('<div class="muted" style="margin-top:4px;font-size:.75rem">Remark: '+e.remark+'</div>'):'';
+    var rid='ap_'+e.staffId+'_'+e.date;
+    return '<div class="card" style="background:var(--s2);box-shadow:none;margin-bottom:10px">'
+      +'<div><b>'+e.staffName+'</b> <span class="muted">· '+e.date+'</span><div style="margin-top:6px">'+kpiLine+'</div>'+remark+'</div>'
+      +'<div id="'+rid+'_reasonWrap" class="hidden" style="margin-top:8px"><input id="'+rid+'_reason" placeholder="Reason for rejection (optional)" style="max-width:420px"></div>'
+      +'<div class="row" style="margin-top:10px;justify-content:flex-end"><button class="btn bo bsm" onclick="showReject(\''+rid+'\')"><i class="fas fa-xmark"></i> Reject</button><button class="btn bg bsm" onclick="decide(\''+e.staffId+'\',\''+e.date+'\',\'approve\',\''+rid+'\')"><i class="fas fa-check"></i> Approve</button></div>'
+      +'<div id="'+rid+'_confirmReject" class="hidden" style="text-align:right;margin-top:6px"><button class="btn bl bsm" onclick="decide(\''+e.staffId+'\',\''+e.date+'\',\'reject\',\''+rid+'\')"><i class="fas fa-check"></i> Confirm Reject</button></div>'
+    +'</div>';
+  }).join('');
+}
+function showReject(rid){$(rid+'_reasonWrap').classList.remove('hidden');$(rid+'_confirmReject').classList.remove('hidden');}
+async function decide(staffId,date,decision,rid){
+  var reason=decision==='reject'?(($(rid+'_reason')||{}).value||''):'';
+  try{await api('decideApproval',{method:'POST',body:{campaignId:CUR.id,staffId:staffId,date:date,decision:decision,reason:reason}});toast(decision==='approve'?'Approved ✓':'Rejected');await loadApprovals();await loadDetail();}catch(e){toast(e.message,'err');}
+}
+async function loadTargetsPane(){
+  var d;try{d=await api('targetsView',{qs:'campaignId='+CUR.id+'&level=staff'});}catch(e){$('targetsBox').innerHTML='<div class="empty"><i class="fas fa-user-plus"></i><div>Add staff first.</div></div>';return;}
+  if(!d.rows.length){$('targetsBox').innerHTML='<div class="empty"><i class="fas fa-user-plus"></i><div>Add staff first (Staff tab).</div></div>';return;}
+  $('targetsBox').innerHTML='<div class="muted" style="margin-bottom:8px">Your target: '+d.keys.map(function(k,i){return d.campaign.kpis[i].name+': '+fmtVal(d.parentTarget[k],d.campaign.kpis[i].unit);}).join(' · ')+'</div>'
+   +'<div class="tw"><table><thead><tr><th>Staff</th>'+d.campaign.kpis.map(function(k){return '<th class="num">'+k.name+'</th>';}).join('')+'</tr></thead><tbody>'
+   +d.rows.map(function(r){return '<tr><td><b>'+r.name+'</b></td>'+d.keys.map(function(k){return '<td class="num">'+numInputHtml('data-s="'+r.id+'" data-k="'+k+'"',r.values[k]||0,'style="width:120px"')+'</td>';}).join('')+'</tr>';}).join('')
+   +'</tbody></table></div>';
+}
+async function saveStaffTargets(){
+  var rows={};document.querySelectorAll('#targetsBox input').forEach(function(inp){var s=inp.dataset.s,k=inp.dataset.k;if(!rows[s])rows[s]={staffId:s};rows[s][k]=parseNum(inp.value);});
+  if(!Object.keys(rows).length){toast('Nothing to save','err');return;}
+  var btn=$('saveTargetsBtn');btn.disabled=true;btn.innerHTML='<span class="ring"></span> Saving…';
+  try{var res=await api('setStaffTargets',{method:'POST',body:{campaignId:CUR.id,rows:Object.values(rows)}});toast('Targets saved ✓');
+    $('validationBox').innerHTML=res.validation.ok?'<div class="tip"><i class="fas fa-circle-check"></i> Staff totals match your branch target for every KPI.</div>':'<div class="note">⚠ Not matching yet: '+res.validation.perKpi.filter(function(p){return !p.matches;}).map(function(p){return p.key+' (sum '+fmt(p.sum)+' vs '+fmt(p.target)+')';}).join(', ')+'</div>';
+  }catch(e){toast(e.message,'err');}
+  btn.disabled=false;btn.innerHTML='<i class="fas fa-floppy-disk"></i> Save Targets';
+}
+function dtab(name,btn){document.querySelectorAll('#detailView .tab').forEach(function(t){t.classList.remove('active');});btn.classList.add('active');document.querySelectorAll('#detailView .pane').forEach(function(p){p.classList.remove('active');});$('pane-'+name).classList.add('active');if(name==='reports')loadReport();}
+var LASTREP=null;
+async function loadReport(){
+  var period=$('repPeriod').value;
+  $('weekWrap').classList.toggle('hidden',period!=='weekly');
+  $('monthWrap').classList.toggle('hidden',period!=='monthly');
+  $('dayWrap').classList.toggle('hidden',period!=='daily');
+  var qs='campaignId='+CUR.id+'&period='+period;
+  if(period==='weekly')qs+='&week='+$('repWeek').value;
+  if(period==='monthly'){if(!$('repMonth').value)$('repMonth').value=defaultReportMonth(CUR);qs+='&month='+$('repMonth').value;}
+  if(period==='daily')qs+='&day='+($('repDay').value||'');
+  try{var r=await api('report',{qs:qs});}catch(e){toast(e.message,'err');return;}
+  LASTREP=r;
+  if(period==='daily'&&$('repDay').options.length===0){if(r.dates&&r.dates.length){$('repDay').innerHTML=r.dates.map(function(d){return '<option value="'+d+'">'+d+'</option>';}).join('');$('repDay').value=r.dates[r.dates.length-1];return loadReport();}else $('repDay').innerHTML='<option value="">— no data —</option>';}
+  $('xlsBtn').disabled=false;$('pdfBtn').disabled=false;
+  var label=period==='weekly'?('Week '+r.week+' (through '+r.asOfDate+')'):(period==='daily'?('Day '+(r.day||'—')):(period==='monthly'?(r.month+' (through '+r.asOfDate+')'):('Whole campaign (through '+r.asOfDate+')')));
+  var cum=r.cumulative;
+  var cumBox='<div class="card" style="background:var(--s2);box-shadow:none;margin-bottom:14px">'
+    +'<div class="stit" style="margin-bottom:2px"><div class="ico g"><i class="fas fa-layer-group"></i></div>Cumulative to date</div>'
+    +'<div class="sdesc">Cumulative actual vs. cumulative plan, from campaign start through '+r.asOfDate+'.</div>'
+    +'<div class="sg c2" style="margin-bottom:8px">'
+      +statCard('Cumulative Achieved',cum.achieved.toFixed(1)+'%','vs full target','gold',cum.achieved,'gold')
+      +statCard('Cumulative Pace',cum.pct.toFixed(0)+'%',paceTag(cum.pct))
+    +'</div>'
+    +renderKpiTableCumulative(cum)
+    +'</div>';
+  var sum='<div class="sg c3" style="margin-bottom:14px">'+r.kpis.map(function(k,i){var v=r.totals['kpi'+i]||0;return statCard(k.name,fmtVal(v,k.unit),'this period');}).join('')+'</div>';
+  var trend=r.trend.length?('<div class="tw"><table><thead><tr><th>Date</th>'+r.kpis.map(function(k){return '<th class="num">'+k.name+'</th>';}).join('')+'</tr></thead><tbody>'+r.trend.map(function(t){return '<tr><td><b>'+t.date+'</b></td>'+r.kpis.map(function(k,i){return '<td class="num">'+fmtVal(t.totals['kpi'+i]||0,k.unit)+'</td>';}).join('')+'</tr>';}).join('')+'</tbody></table></div>'):'<div class="empty"><i class="fas fa-inbox"></i><div>No approved data for this period.</div></div>';
+  $('reportBox').innerHTML='<div class="muted" style="margin-bottom:10px">'+r.title+' · '+label+'</div>'+cumBox+'<div class="stit" style="margin-bottom:2px"><div class="ico"><i class="fas fa-calendar-day"></i></div>This period only</div>'+sum+trend;
+}
+
+// ---- staff management (unchanged pattern) ----
+async function loadStaff(){var d;try{d=await api('listStaff');}catch(e){toast(e.message,'err');return;}STAFFLIST=d.staff;renderStaffList();}
+function renderStaffList(){
+  if(!STAFFLIST.length){$('staffBox').innerHTML='<div class="empty"><i class="fas fa-user-plus"></i><div>No staff added yet.</div></div>';return;}
+  $('staffBox').innerHTML='<div class="tw"><table><thead><tr><th>Name/ID</th><th>Status</th><th>Password</th><th style="text-align:right">Actions</th></tr></thead><tbody>'
+   +STAFFLIST.map(function(s){return '<tr><td><b>'+s.name+'</b></td><td>'+(s.active?'<span class="bdg bx">Active</span>':'<span class="bdg bl">Deactivated</span>')+'</td><td>'+(s.mustChangePassword?'<span class="bdg bf">Not signed in yet</span>':'<span class="bdg bn">Set</span>')+'</td><td style="text-align:right"><button class="btn bo bsm" onclick="resetPw(\''+s.id+'\')"><i class="fas fa-key"></i></button> <button class="btn bo bsm" onclick="toggleActive(\''+s.id+'\','+(!s.active)+')"><i class="fas fa-'+(s.active?'user-slash':'user-check')+'"></i></button></td></tr>';}).join('')+'</tbody></table></div>';
+}
+async function addStaff(){
+  var name=$('newStaffName').value.trim();if(!name){toast('Enter a name or ID','err');return;}
+  try{var r=await api('addStaff',{method:'POST',body:{name:name}});$('newStaffName').value='';
+    $('genPwBox').innerHTML='<div class="tip" style="margin-top:12px"><i class="fas fa-key"></i> <b>'+r.staff.name+'</b> temporary password: <code style="background:var(--s3);padding:2px 8px;border-radius:6px;font-weight:800">'+r.generatedPassword+'</code> <button class="btn bo bsm" onclick="navigator.clipboard.writeText(\''+r.generatedPassword+'\');toast(\'Copied\')"><i class="fas fa-copy"></i> Copy</button></div>';
+    toast('Staff added ✓');await loadStaff();
+  }catch(e){toast(e.message,'err');}
+}
+async function resetPw(id){try{var r=await api('resetStaffPassword',{method:'POST',body:{staffId:id}});$('genPwBox').innerHTML='<div class="tip" style="margin-top:12px"><i class="fas fa-key"></i> New password: <code style="background:var(--s3);padding:2px 8px;border-radius:6px;font-weight:800">'+r.generatedPassword+'</code></div>';toast('Password reset ✓');await loadStaff();}catch(e){toast(e.message,'err');}}
+async function toggleActive(id,active){try{await api('setStaffActive',{method:'POST',body:{staffId:id,active:active}});toast(active?'Reactivated':'Deactivated');await loadStaff();}catch(e){toast(e.message,'err');}}
+
+// ---- feedback: view + reply ----
+async function loadFeedback(){
+  var d;try{d=await api('listFeedback');}catch(e){toast(e.message,'err');return;}
+  if(!d.feedback.length){$('feedbackBox').innerHTML='<div class="empty"><i class="fas fa-comments"></i><div>No feedback yet.</div></div>';return;}
+  $('feedbackBox').innerHTML=d.feedback.map(function(f){
+    var rid='fb_'+f.id;
+    return '<div class="feeditem"><div class="row" style="justify-content:space-between"><b>'+(f.staffName?('For '+f.staffName):'Branch-wide')+'</b><span class="muted" style="font-size:.72rem">'+new Date(f.createdAt).toLocaleDateString()+'</span></div>'
+     +f.thread.map(function(m){return '<div class="feedmsg by'+m.by+'"><span class="who">'+m.name+'</span> — '+m.message+'</div>';}).join('')
+     +'<div class="row" style="margin-top:8px;gap:8px"><input id="'+rid+'_reply" placeholder="Write a reply…" style="flex:1"><button class="btn bg bsm" onclick="sendReply(\''+f.id+'\',\''+f.districtId+'\',\''+rid+'\')"><i class="fas fa-reply"></i> Reply</button></div></div>';
+  }).join('');
+}
+async function sendReply(feedbackId,districtId,rid){
+  var msg=$(rid+'_reply').value.trim();if(!msg){toast('Write a reply first','err');return;}
+  try{await api('replyFeedback',{method:'POST',body:{feedbackId:feedbackId,districtId:districtId,message:msg}});toast('Reply sent ✓');await loadFeedback();}catch(e){toast(e.message,'err');}
+}
+load();
+</script>
+</body>
+</html>
