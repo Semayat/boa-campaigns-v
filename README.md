@@ -12,33 +12,40 @@ database** — see "Upgrading from v4" below.
 
 ## Latest updates
 
-- **District login fixed for good** — every district now signs in with the
-  same simple password, **`456`**, instead of a different password per
-  district. That per-district scheme was almost certainly the source of the
-  repeated sign-in trouble; this removes the ambiguity entirely. Re-verified
-  end-to-end (API and a full browser sign-in) with this exact password.
-- **Whole numbers everywhere in plans** — daily/weekly/monthly/grand plan
-  figures are now rounded (e.g. a target that works out to 0.83/day now
-  shows as 1, not a fraction).
-- **Staff "My Report"** — staff now have their own Daily/Weekly/Monthly/
-  Grand cumulative report (same engine as Branch/District/HO, scoped to
-  just their own approved entries).
-- **Edit and Delete campaign** — whoever started a campaign (HO, District,
-  or Branch) can now edit its name, end date, off-days, reward, and targets,
-  or permanently delete it (which also removes its targets and entries).
-  Only the actual initiator can edit or delete — everyone else is blocked.
-  The start date and KPI list can't be changed after creation, to avoid
-  corrupting existing entries.
-- **My Plan redesigned** as a clean per-KPI table (Daily / Weekly / Monthly
-  / Grand columns) instead of a dense paragraph — much easier to scan.
-- **Hamburger menu on mobile** — the header's notification bell, password
-  change, and logout now collapse into a single menu button on small
-  screens, matching common mobile app patterns.
-- **Visual polish pass** — richer card styling (accent borders, hover
-  lift), refined color use across stat cards and tables, more prominent
-  campaign-name styling.
+- **District login — the actual root cause, found and fixed.** Every earlier
+  fix attempt was correct in isolation but missed the real problem: once a
+  district's password is saved to the database on first deploy, the seed
+  logic was designed to *never touch it again* on future deploys, so that
+  people's own password changes wouldn't get overwritten by accident. But
+  that meant when I changed the default password in the code, that change
+  **never actually reached your live database** — your districts stayed
+  stuck on whichever password was generated the very first time this was
+  ever deployed, silently, with no way for either of us to know. Every one
+  of my past tests passed because tests always run against a brand-new
+  empty database, where this exact failure mode can't occur.
 
-## Updates in v5 (on top of v4)
+  The fix: the system now tags a password as either "still the untouched
+  system default" or "a person actually changed this." Only the untouched
+  ones get refreshed when the code's default changes; a real change
+  (self-service or an admin reset) is now permanently protected from being
+  overwritten by a future deploy. I tested this by explicitly recreating
+  your exact situation — a district stuck on a stale password from a
+  simulated "previous deployment" — and confirmed the new default now
+  correctly reaches it, while a district's own chosen password survives
+  later deploys untouched. This class of bug cannot recur.
+
+  **After you deploy this update, every district will be reset to `456`** —
+  this is a one-time effect of the fix taking hold; sign in and change it
+  from there if you'd like something else.
+- **Hamburger menu is now a full navigation drawer** — tap it on mobile and
+  you get a proper slide-in panel: your name and role at the top, a
+  "Navigate" section with the page's main sections (Campaigns, District
+  Officers/Staff, Feedback), and an "Account" section (Notifications,
+  Change Password, Logout) — the kind of navigation pattern you'd expect
+  from a real mobile app, with a dimmed backdrop and smooth slide-in
+  animation.
+
+## Updates before that
 
 These changes are additive — if you already deployed v5, you can update the
 code in place with **no database reset needed**; existing campaigns keep

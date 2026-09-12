@@ -37,9 +37,15 @@ async function login(role,scopeId,password,username){
 }
 
 // ---- shared header (with notification bell) ----
-function renderHeader(roleLabel,roleIcon){
+function renderHeader(roleLabel,roleIcon,navItems){
   var s=getSession();
   setTimeout(loadNotifBell,50);
+  var initial=(s&&s.name?s.name.trim().charAt(0):roleLabel.charAt(0)).toUpperCase();
+  var navHtml='';
+  if(navItems&&navItems.length){
+    navHtml='<div class="hamsectionlabel">Navigate</div>'
+      +navItems.map(function(n){return '<button onclick="hamNavigate(\''+n.sel.replace(/'/g,"\\'")+'\')"><i class="'+n.icon+'"></i> '+n.label+'</button>';}).join('');
+  }
   return '<header class="hdr"><div class="hdr-l">'
     +'<div class="logo"><img src="'+LOGO+'" alt="BoA" onerror="this.parentNode.innerHTML=\'<span>አ</span>\'"></div>'
     +'<div><div class="bname">BoA <em>Campaigns</em></div><div class="bsub">Campaign Command Center</div></div></div>'
@@ -55,10 +61,14 @@ function renderHeader(roleLabel,roleIcon){
     +'<button class="btn bo bsm hamburger-btn" onclick="toggleHamburgerMenu()" id="hamBtn"><i class="fas fa-bars"></i><span id="notifCountM" class="notifcount hidden">0</span></button>'
     +'</div>'
     +'</div></header>'
+    +'<div id="hamBackdrop" class="hambackdrop hidden" onclick="toggleHamburgerMenu()"></div>'
     +'<div id="hamMenu" class="hammenu hidden">'
+    +'<div class="hamprofile"><div class="hamavatar">'+initial+'</div><div><div class="hamname">'+(s&&s.name?s.name:roleLabel)+'</div><div class="hamrole">'+roleLabel+'</div></div></div>'
+    +navHtml
+    +'<div class="hamsectionlabel">Account</div>'
     +'<button onclick="hamAction(\'notif\')"><i class="fas fa-bell"></i> Notifications <span id="hamNotifCount" class="notifcount hidden" style="position:static;margin-left:auto"></span></button>'
     +'<button onclick="hamAction(\'pw\')"><i class="fas fa-key"></i> Change Password</button>'
-    +'<button onclick="hamAction(\'logout\')"><i class="fas fa-right-from-bracket"></i> Logout</button>'
+    +'<button class="hamlogout" onclick="hamAction(\'logout\')"><i class="fas fa-right-from-bracket"></i> Logout</button>'
     +'</div>'
     +'<div id="pwModal" class="modal hidden"><div class="modalcard"><div class="stit"><div class="ico g"><i class="fas fa-key"></i></div>Change Password</div>'
     +'<div style="margin-top:10px"><label>New Password</label><input type="password" id="pwNew1" placeholder="••••••••"></div>'
@@ -90,14 +100,19 @@ function toggleNotifPanel(){
   p.classList.remove('hidden');
 }
 async function ackNotif(id){try{await api('markNotificationRead',{method:'POST',body:{notifId:id}});await loadNotifBell();toggleNotifPanel();toggleNotifPanel();}catch(e){}}
-// ---- mobile hamburger menu (collapses bell/password/logout into one dropdown) ----
+// ---- mobile hamburger menu (app-style drawer: profile + nav + account) ----
 function toggleHamburgerMenu(){
-  var m=$('hamMenu');
-  if(!m.classList.contains('hidden')){m.classList.add('hidden');return;}
-  m.classList.remove('hidden');
+  var m=$('hamMenu'),bd=$('hamBackdrop');
+  if(!m.classList.contains('hidden')){m.classList.add('hidden');bd.classList.add('hidden');return;}
+  m.classList.remove('hidden');bd.classList.remove('hidden');
+}
+function hamNavigate(sel){
+  toggleHamburgerMenu();
+  var el=document.querySelector(sel);
+  if(el)el.click();
 }
 function hamAction(kind){
-  $('hamMenu').classList.add('hidden');
+  toggleHamburgerMenu();
   if(kind==='notif'){
     var items=window._NOTIFS||[];
     var p=el('div','notifpanel hammobilepanel');

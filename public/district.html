@@ -12,9 +12,9 @@
   <div class="hero"><div class="hbadge"><i class="fas fa-sitemap"></i> District</div><h1 id="dName">District</h1><p>Campaigns, branch performance, officers, and feedback.</p></div>
 
   <div class="tabs">
-    <button class="tab active" onclick="mtab('campaigns',this)"><i class="fas fa-flag"></i> Campaigns</button>
-    <button class="tab" onclick="mtab('officers',this)"><i class="fas fa-user-shield"></i> District Officers</button>
-    <button class="tab" onclick="mtab('feedback',this)"><i class="fas fa-comments"></i> Feedback</button>
+    <button class="tab active" id="navtab-campaigns" onclick="mtab('campaigns',this)"><i class="fas fa-flag"></i> Campaigns</button>
+    <button class="tab" id="navtab-officers" onclick="mtab('officers',this)"><i class="fas fa-user-shield"></i> District Officers</button>
+    <button class="tab" id="navtab-feedback" onclick="mtab('feedback',this)"><i class="fas fa-comments"></i> Feedback</button>
   </div>
 
   <div class="pane active" id="pane-campaigns">
@@ -81,7 +81,11 @@
 <script src="app.js"></script>
 <script>
 var S=requireRole('district'),CAMPAIGNS=[],CUR=null,OFFICERS=[],BRANCHES_CACHE=[];
-document.getElementById('hdr').innerHTML=renderHeader('District','fas fa-sitemap');
+document.getElementById('hdr').innerHTML=renderHeader('District','fas fa-sitemap',[
+  {sel:'#navtab-campaigns',icon:'fas fa-flag',label:'Campaigns'},
+  {sel:'#navtab-officers',icon:'fas fa-user-shield',label:'District Officers'},
+  {sel:'#navtab-feedback',icon:'fas fa-comments',label:'Feedback'}
+]);
 function statCard(label,val,sub,cls,pctv,fillcls){var bar=pctv!=null?'<div class="pbar"><div class="pfill '+(fillcls||'')+'" style="width:'+Math.min(100,pctv)+'%"></div></div>':'';return '<div class="sc '+(cls||'')+'"><div class="sv">'+val+'</div><div class="sl">'+label+'</div><div class="sx">'+(sub||'')+'</div>'+bar+'</div>';}
 function mtab(name,btn){document.querySelectorAll('.wrap>.tabs>.tab').forEach(function(t){t.classList.remove('active');});btn.classList.add('active');['campaigns','officers','feedback'].forEach(function(n){$('pane-'+n).classList.toggle('active',n===name);});if(name==='officers')loadOfficers();if(name==='feedback')loadFeedback();}
 

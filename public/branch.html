@@ -12,9 +12,9 @@
   <div class="hero"><div class="hbadge"><i class="fas fa-store"></i> Branch</div><h1 id="brName">Branch</h1><p>Campaigns, staff, approvals, and feedback.</p></div>
 
   <div class="tabs">
-    <button class="tab active" onclick="mtab('campaigns',this)"><i class="fas fa-flag"></i> Campaigns</button>
-    <button class="tab" onclick="mtab('staff',this)"><i class="fas fa-users"></i> Staff</button>
-    <button class="tab" onclick="mtab('feedback',this)"><i class="fas fa-comments"></i> Feedback</button>
+    <button class="tab active" id="navtab-campaigns" onclick="mtab('campaigns',this)"><i class="fas fa-flag"></i> Campaigns</button>
+    <button class="tab" id="navtab-staff" onclick="mtab('staff',this)"><i class="fas fa-users"></i> Staff</button>
+    <button class="tab" id="navtab-feedback" onclick="mtab('feedback',this)"><i class="fas fa-comments"></i> Feedback</button>
   </div>
 
   <div class="pane active" id="pane-campaigns">
@@ -86,7 +86,11 @@
 <script src="app.js"></script>
 <script>
 var S=requireRole('branch'),CAMPAIGNS=[],CUR=null,STAFFLIST=[];
-document.getElementById('hdr').innerHTML=renderHeader('Branch','fas fa-store');
+document.getElementById('hdr').innerHTML=renderHeader('Branch','fas fa-store',[
+  {sel:'#navtab-campaigns',icon:'fas fa-flag',label:'Campaigns'},
+  {sel:'#navtab-staff',icon:'fas fa-users',label:'Staff'},
+  {sel:'#navtab-feedback',icon:'fas fa-comments',label:'Feedback'}
+]);
 function statCard(label,val,sub,cls,pctv,fillcls){var bar=pctv!=null?'<div class="pbar"><div class="pfill '+(fillcls||'')+'" style="width:'+Math.min(100,pctv)+'%"></div></div>':'';return '<div class="sc '+(cls||'')+'"><div class="sv">'+val+'</div><div class="sl">'+label+'</div><div class="sx">'+(sub||'')+'</div>'+bar+'</div>';}
 function mtab(name,btn){document.querySelectorAll('.wrap>.tabs>.tab').forEach(function(t){t.classList.remove('active');});btn.classList.add('active');['campaigns','staff','feedback'].forEach(function(n){$('pane-'+n).classList.toggle('active',n===name);});if(name==='staff')loadStaff();if(name==='feedback')loadFeedback();}
 

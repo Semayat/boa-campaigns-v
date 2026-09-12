@@ -237,11 +237,11 @@ app.all('/api/data', async (req, res) => {
     if (!password || String(password).length < 4) return res.status(400).json({ error: 'Password must be at least 4 characters' });
     const ph = hash(password);
     if (session.role === 'ho') {
-      await Store.setHOAuth({ passwordHash: ph, mustChangePassword: false });
+      await Store.setHOAuth({ passwordHash: ph, mustChangePassword: false, seeded: false });
     } else if (session.role === 'district') {
-      const d = await Store.getDistrict(session.scopeId); d.auth = { passwordHash: ph, mustChangePassword: false }; await Store.setDistrict(d);
+      const d = await Store.getDistrict(session.scopeId); d.auth = { passwordHash: ph, mustChangePassword: false, seeded: false }; await Store.setDistrict(d);
     } else if (session.role === 'branch') {
-      const b = await Store.getBranch(session.scopeId); b.auth = { passwordHash: ph, mustChangePassword: false }; await Store.setBranch(b);
+      const b = await Store.getBranch(session.scopeId); b.auth = { passwordHash: ph, mustChangePassword: false, seeded: false }; await Store.setBranch(b);
     } else if (session.role === 'staff') {
       const b = await Store.getBranch(session.scopeId); const st = (b.staff || []).find((s) => s.id === session.staffId);
       if (!st) return res.status(404).json({ error: 'Staff record not found' });
@@ -259,7 +259,7 @@ app.all('/api/data', async (req, res) => {
     if (session.role !== 'ho') return res.status(403).json({ error: 'HO only' });
     const { districtId } = req.body || {};
     const d = await Store.getDistrict(districtId); if (!d) return res.status(404).json({ error: 'District not found' });
-    const pw = genPassword(8); d.auth = { passwordHash: hash(pw), mustChangePassword: true }; await Store.setDistrict(d);
+    const pw = genPassword(8); d.auth = { passwordHash: hash(pw), mustChangePassword: true, seeded: false }; await Store.setDistrict(d);
     await notify('district:' + districtId, 'Your password was reset by Head Office.', { kind: 'password_reset' });
     return res.json({ ok: true, generatedPassword: pw });
   }
@@ -267,7 +267,7 @@ app.all('/api/data', async (req, res) => {
     if (session.role !== 'district') return res.status(403).json({ error: 'District only' });
     const { branchId } = req.body || {};
     const b = await Store.getBranch(branchId); if (!b || b.districtId !== session.scopeId) return res.status(404).json({ error: 'Branch not found' });
-    const pw = genPassword(8); b.auth = { passwordHash: hash(pw), mustChangePassword: true }; await Store.setBranch(b);
+    const pw = genPassword(8); b.auth = { passwordHash: hash(pw), mustChangePassword: true, seeded: false }; await Store.setBranch(b);
     await notify('branch:' + branchId, 'Your password was reset by your District.', { kind: 'password_reset' });
     return res.json({ ok: true, generatedPassword: pw });
   }
@@ -880,11 +880,16 @@ app.all('/api/data', async (req, res) => {
 // =====================================================================
 async function runSeed(reset) {
   // Org chart (districts + sample branches) — independent of any campaign.
+  // auth.seeded=true marks a password as the untouched system default, safe to
+  // refresh on redeploy if the code's default ever changes. Once a person
+  // changes their own password (or it's reset), auth.seeded is set to false so
+  // future redeploys never touch it again.
   for (const d of DISTRICTS) {
     const cur = await Store.getDistrict(d.id);
+    const keepExisting = cur && cur.auth && cur.auth.seeded === false && !reset;
     await Store.setDistrict({
       id: d.id, name: d.name, branchCount: d.branchCount,
-      auth: (cur && cur.auth && !reset) ? cur.auth : { passwordHash: hash(process.env.DISTRICT_PASSWORD || '456'), mustChangePassword: false }
+      auth: keepExisting ? cur.auth : { passwordHash: hash(process.env.DISTRICT_PASSWORD || '456'), mustChangePassword: false, seeded: true }
     });
   }
   let count = 0; const TYPES = ['Standard', 'Corporate', 'Premium'];
@@ -893,18 +898,20 @@ async function runSeed(reset) {
     for (const nm of names) {
       const id = d.id + '__' + nm.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
       const cur = await Store.getBranch(id);
+      const keepExisting = cur && cur.auth && (cur.auth.seeded === false || cur.auth.seeded === undefined) && !reset;
       await Store.setBranch({
         id, name: nm, districtId: d.id, districtName: d.name,
         type: (cur && cur.type) || TYPES[ti++ % 3],
         supportOfficer: (cur && cur.supportOfficer) || '',
-        auth: (cur && cur.auth && !reset) ? cur.auth : { passwordHash: hash(process.env.BRANCH_PASSWORD || 'BoA-Branch-2026'), mustChangePassword: false },
+        auth: keepExisting ? cur.auth : { passwordHash: hash(process.env.BRANCH_PASSWORD || 'BoA-Branch-2026'), mustChangePassword: false, seeded: true },
         staff: (cur && cur.staff) || []
       });
       count++;
     }
   }
   const curHO = await Store.getHOAuth();
-  if (!curHO || reset) await Store.setHOAuth({ passwordHash: hash(process.env.HO_PASSWORD || 'BoA-HO-2026'), mustChangePassword: false });
+  const keepHO = curHO && (curHO.seeded === false || curHO.seeded === undefined) && !reset;
+  if (!keepHO) await Store.setHOAuth({ passwordHash: hash(process.env.HO_PASSWORD || 'BoA-HO-2026'), mustChangePassword: false, seeded: true });
   // Seed one sample HO campaign so a fresh deploy isn't empty.
   const existingCampaigns = await Store._list('campaign:');
   if (!existingCampaigns.length || reset) {

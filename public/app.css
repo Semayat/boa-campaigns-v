@@ -239,16 +239,24 @@ input.numtext{font-variant-numeric:tabular-nums;text-align:right}
 
 /* ===== v7 additions: hamburger menu, enhanced cards/coloring, plan table ===== */
 
-/* ---- Hamburger menu (mobile header) ---- */
+/* ---- Hamburger menu — app-style slide-in drawer ---- */
 .hdr-desktop-actions{display:flex;align-items:center;gap:9px}
 .hdr-mobile-actions{display:none;position:relative}
 .hamburger-btn{position:relative}
-.hammenu{position:fixed;top:56px;right:12px;left:12px;background:var(--s);border:1px solid var(--b);border-radius:var(--rl);box-shadow:var(--shb);z-index:250;overflow:hidden;animation:hamdrop .18s ease-out}
-@keyframes hamdrop{from{opacity:0;transform:translateY(-8px)}to{opacity:1;transform:translateY(0)}}
-.hammenu button{display:flex;align-items:center;gap:10px;width:100%;padding:13px 16px;background:none;border:none;border-bottom:1px solid var(--b);font-family:var(--ff);font-size:.86rem;font-weight:700;color:var(--t2);text-align:left;cursor:pointer}
-.hammenu button:last-child{border-bottom:none}
-.hammenu button:active{background:var(--s2)}
-.hammenu button i{color:var(--gold);width:16px;text-align:center}
+.hambackdrop{position:fixed;inset:0;background:rgba(6,24,47,.45);z-index:240;animation:hamfade .18s ease-out}
+@keyframes hamfade{from{opacity:0}to{opacity:1}}
+.hammenu{position:fixed;top:0;right:0;bottom:0;width:82%;max-width:320px;background:var(--s);box-shadow:-8px 0 32px rgba(10,35,66,.25);z-index:250;overflow-y:auto;animation:hamslide .22s cubic-bezier(.16,1,.3,1)}
+@keyframes hamslide{from{transform:translateX(100%)}to{transform:translateX(0)}}
+.hamprofile{display:flex;align-items:center;gap:12px;padding:22px 18px;background:linear-gradient(135deg,var(--navyd),var(--navy) 60%,var(--navy2));color:#fff}
+.hamavatar{width:44px;height:44px;border-radius:50%;background:linear-gradient(135deg,var(--gold),var(--goldd));color:var(--navy);display:flex;align-items:center;justify-content:center;font-family:var(--fd);font-weight:800;font-size:1.1rem;flex-shrink:0;box-shadow:0 3px 10px rgba(0,0,0,.2)}
+.hamname{font-family:var(--fd);font-weight:800;font-size:.95rem;line-height:1.2}
+.hamrole{font-size:.68rem;color:rgba(255,255,255,.7);text-transform:uppercase;letter-spacing:.05em;font-weight:700;margin-top:2px}
+.hamsectionlabel{font-size:.66rem;font-weight:800;text-transform:uppercase;letter-spacing:.06em;color:var(--t4);padding:14px 18px 6px}
+.hammenu button{display:flex;align-items:center;gap:12px;width:100%;padding:13px 18px;background:none;border:none;font-family:var(--ff);font-size:.87rem;font-weight:700;color:var(--t2);text-align:left;cursor:pointer;transition:background .15s}
+.hammenu button:active,.hammenu button:hover{background:var(--s2)}
+.hammenu button i{color:var(--gold);width:18px;text-align:center;font-size:.95rem}
+.hammenu button.hamlogout{color:var(--er);margin-top:6px;border-top:1px solid var(--b)}
+.hammenu button.hamlogout i{color:var(--er)}
 .hammobilepanel{position:fixed;top:56px;right:12px;left:12px;max-height:70vh;z-index:260}
 
 /* ---- Enhanced cards: subtle top accent + richer hover ---- */
