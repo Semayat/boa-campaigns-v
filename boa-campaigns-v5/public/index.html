@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>BoA Campaigns · Sign In</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+<link rel="stylesheet" href="app.css">
+<style>
+.loginwrap{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px}
+.loginbox{width:100%;max-width:440px}
+.lhead{text-align:center;margin-bottom:22px}
+.llogo{width:64px;height:64px;border-radius:18px;background:#fff;border:1px solid var(--b);display:flex;align-items:center;justify-content:center;margin:0 auto 14px;box-shadow:0 8px 24px rgba(245,168,0,.3);overflow:hidden}
+.llogo img{width:100%;height:100%;object-fit:contain;padding:6px}
+.llogo span{font-family:var(--fd);font-weight:800;color:var(--gold);font-size:1.9rem}
+.lhead h1{font-family:var(--fd);font-size:1.5rem;font-weight:800}.lhead h1 em{font-style:normal;color:var(--gold)}
+.lhead p{font-size:.8rem;color:var(--t3);margin-top:3px}
+.roletabs{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-bottom:8px}
+.roletabs2{display:grid;grid-template-columns:repeat(2,1fr);gap:6px;margin-bottom:16px}
+.rt{padding:12px 8px;border:1.5px solid var(--b);border-radius:var(--r);background:var(--s2);cursor:pointer;text-align:center;transition:all .2s}
+.rt i{font-size:1.1rem;color:var(--t3);display:block;margin-bottom:5px}
+.rt span{font-size:.74rem;font-weight:700;color:var(--t2)}
+.rt.active{border-color:var(--gold);background:rgba(245,168,0,.08)}
+.rt.active i,.rt.active span{color:var(--goldd)}
+.fld{margin-bottom:13px}
+.lfoot{text-align:center;margin-top:16px;font-size:.72rem;color:var(--t4)}
+</style>
+</head>
+<body>
+<div class="loginwrap"><div class="loginbox">
+  <div class="lhead">
+    <div class="llogo"><img src="https://www.bankofabyssinia.com/wp-content/uploads/2020/09/Asset-1@4x.png" alt="BoA" onerror="this.parentNode.innerHTML='<span>አ</span>'"></div>
+    <h1>BoA <em>Campaigns</em></h1>
+    <p>Campaign Command Center · Bank of Abyssinia</p>
+  </div>
+  <div class="card">
+    <div class="roletabs" id="roleTabs">
+      <div class="rt active" data-role="ho" onclick="pickRole('ho')"><i class="fas fa-building-columns"></i><span>Head Office</span></div>
+      <div class="rt" data-role="district" onclick="pickRole('district')"><i class="fas fa-sitemap"></i><span>District</span></div>
+      <div class="rt" data-role="branch" onclick="pickRole('branch')"><i class="fas fa-store"></i><span>Branch</span></div>
+    </div>
+    <div class="roletabs2">
+      <div class="rt" data-role="staff" onclick="pickRole('staff')"><i class="fas fa-user"></i><span>Staff</span></div>
+      <div class="rt" data-role="officer" onclick="pickRole('officer')"><i class="fas fa-user-shield"></i><span>District Officer</span></div>
+    </div>
+    <div class="fld hidden" id="distFld"><label>District</label><select id="distSel"></select></div>
+    <div class="fld hidden" id="brDistFld"><label>District</label><select id="brDistSel" onchange="filterBranches()"></select></div>
+    <div class="fld hidden" id="branchFld"><label>Branch</label><select id="branchSel"></select></div>
+    <div class="fld hidden" id="usernameFld"><label id="usernameLbl">Staff Name or ID</label><input id="usernameInp" placeholder="e.g. Abebe Bikila or EMP-0231"></div>
+    <div class="fld"><label>Password</label><input type="password" id="pw" placeholder="••••••••" onkeydown="if(event.key==='Enter')doLogin()"></div>
+    <button class="btn bp" style="width:100%" id="loginBtn" onclick="doLogin()"><i class="fas fa-right-to-bracket"></i> Sign In</button>
+  </div>
+  <div class="lfoot">Bank of Abyssinia · Campaign Command Center</div>
+</div></div>
+<div id="toast"></div>
+<script src="app.js"></script>
+<script>
+var ROLE='ho',DIR={districts:[],branches:[]};
+async function boot(){
+  try{ DIR=await (await fetch(API+'/directory')).json(); }catch(e){ toast('Could not load directory','err'); }
+  fillDistricts();
+}
+function fillDistricts(){
+  var ds=DIR.districts||[];
+  $('distSel').innerHTML=ds.map(function(d){return '<option value="'+d.id+'">'+d.name+'</option>';}).join('');
+  $('brDistSel').innerHTML=ds.map(function(d){return '<option value="'+d.id+'">'+d.name+'</option>';}).join('');
+  filterBranches();
+}
+function filterBranches(){
+  var did=$('brDistSel').value;
+  var bs=(DIR.branches||[]).filter(function(b){return b.districtId===did;});
+  $('branchSel').innerHTML=bs.length?bs.map(function(b){return '<option value="'+b.id+'">'+b.name+'</option>';}).join(''):'<option value="">— no branches available —</option>';
+}
+function pickRole(r){
+  ROLE=r;
+  document.querySelectorAll('.rt').forEach(function(t){t.classList.toggle('active',t.dataset.role===r);});
+  $('distFld').classList.toggle('hidden',r!=='district'&&r!=='officer');
+  $('brDistFld').classList.toggle('hidden',r!=='branch'&&r!=='staff');
+  $('branchFld').classList.toggle('hidden',r!=='branch'&&r!=='staff');
+  $('usernameFld').classList.toggle('hidden',r!=='staff'&&r!=='officer');
+  $('usernameLbl').textContent=r==='officer'?'Officer Name or ID':'Staff Name or ID';
+  if(r==='officer')$('usernameInp').placeholder='e.g. Meron Assefa or OFC-014';
+  else $('usernameInp').placeholder='e.g. Abebe Bikila or EMP-0231';
+}
+async function doLogin(){
+  var pw=$('pw').value;if(!pw){toast('Enter password','err');return;}
+  var scopeId=null,username=null;
+  if(ROLE==='district'||ROLE==='officer')scopeId=$('distSel').value;
+  if(ROLE==='branch'||ROLE==='staff')scopeId=$('branchSel').value;
+  if((ROLE==='district'||ROLE==='officer'||ROLE==='branch'||ROLE==='staff')&&!scopeId){toast('Select a '+(ROLE==='staff'?'branch':(ROLE==='officer'?'district':ROLE)),'err');return;}
+  if(ROLE==='staff'||ROLE==='officer'){username=$('usernameInp').value.trim();if(!username){toast('Enter your name or ID','err');return;}}
+  var btn=$('loginBtn');btn.disabled=true;btn.innerHTML='<span class="ring"></span> Signing in…';
+  try{
+    var data=await login(ROLE,scopeId,pw,username);
+    saveSession(data);
+    if(data.role==='ho')location.href='ho.html';
+    else if(data.role==='district')location.href='district.html';
+    else if(data.role==='staff')location.href='staff.html';
+    else if(data.role==='officer')location.href='officer.html';
+    else location.href='branch.html';
+  }catch(e){toast(e.message,'err');btn.disabled=false;btn.innerHTML='<i class="fas fa-right-to-bracket"></i> Sign In';}
+}
+boot();
+</script>
+</body>
+</html>

@@ -1,0 +1,10 @@
+{
+  "name": "boa-campaigns-v5",
+  "version": "5.0.0",
+  "private": true,
+  "description": "Bank of Abyssinia — generalized Campaign Management System (any Branch, District, or HO can start a campaign; custom KPIs; cascading targets; district officer audits; notifications)",
+  "main": "server.js",
+  "scripts": { "start": "node server.js" },
+  "dependencies": { "express": "^4.19.2", "pg": "^8.12.0" },
+  "engines": { "node": ">=18" }
+}
