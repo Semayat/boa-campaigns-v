@@ -12,6 +12,31 @@ database** — see "Upgrading from v4" below.
 
 ## Latest updates
 
+- **Districts now choose which branches take part in a campaign** — when
+  starting a campaign, a district sees a checklist of its own branches with
+  a "Select All / Deselect All" toggle, and can tick/untick individual
+  branches. Leaving everything selected (the default) behaves as before —
+  all branches take part.
+- **District Officer reports are now a real aggregated table** — an
+  officer's assigned branches show up as a table (one row per branch) with
+  each KPI's actual vs. plan side by side, color-coded by pace. A **Total**
+  row at the bottom is the mathematically correct sum of the officer's
+  branches — their combined plan and their combined report — not just a
+  list of separate percentages.
+- **District dashboards now show two clearly separate report tables** —
+  "Branch Report" (every branch, actual vs. plan per KPI, with a Total row)
+  and "District Support Report" (the same, but grouped by each branch's
+  assigned support officer) — kept as distinct tabs so they're never
+  confused with each other.
+- **Found and fixed a related bug while building this**: a district's own
+  ID was never actually sent back after signing in (it was encoded inside
+  the login token, but the page's saved session never had direct access to
+  it). Nothing needed it until the new branch-picker feature — which is
+  exactly what exposed it. Fixed by including it directly in the sign-in
+  response for District, Branch, Staff, and District Officer alike.
+
+## Earlier updates
+
 - **District login — the actual root cause, found and fixed.** Every earlier
   fix attempt was correct in isolation but missed the real problem: once a
   district's password is saved to the database on first deploy, the seed
@@ -185,6 +210,27 @@ campaign modal (including that it correctly pre-fills existing target
 values — an early version of this didn't, and was caught and fixed during
 testing), the delete confirmation, the mobile hamburger menu opening and
 closing correctly, and the staff My Report cumulative view.
+
+The most recent round of changes adds 37 further automated checks: the
+district login root-cause fix (deliberately simulating a district stuck on
+a stale password from a "previous deployment" and confirming the new
+default correctly reaches it, while a district's own chosen password and
+an HO-issued reset both correctly survive a later redeploy — this is the
+exact scenario that every earlier fix attempt had missed), the district
+branch-picker (select-all, tick/untick, and confirming a district can't
+sneak in another district's branch), the district officer's aggregated
+plan/report table (hand-verified: two branches at 10% and 20% pace
+correctly combine into a Total row of 15%, matching the actual and plan
+sums exactly), and the district's two separate report tables with their
+own Total rows. Visually confirmed in a live browser: district sign-in
+with the new password, the branch picker (including the tick/untick
+interaction updating the live count), the hamburger drawer's navigation
+section actually switching tabs, and all three new tables rendering
+correctly with real submitted data. One bug was caught and fixed during
+this pass — a district's own ID was never included in its sign-in
+response (only encoded in the auth token), which the new branch-picker
+was the first feature to ever need directly; now fixed for all four
+scoped roles.
 
 ## Deploy on Render — Blueprint (recommended, one click)
 

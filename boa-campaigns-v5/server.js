@@ -118,7 +118,7 @@ function monthEndDate(yearMonth, campaign) {
 // =====================================================================
 // CAMPAIGN ENGINE — scope + effective-target resolution
 // =====================================================================
-async function computeScope(initiatorLevel, initiatorId) {
+async function computeScope(initiatorLevel, initiatorId, selectedBranchIds) {
   if (initiatorLevel === 'ho') {
     const districts = await Store.listDistricts();
     const branches = await Store.listBranches();
@@ -126,7 +126,13 @@ async function computeScope(initiatorLevel, initiatorId) {
   }
   if (initiatorLevel === 'district') {
     const branches = await Store.listBranchesByDistrict(initiatorId);
-    return { districtIds: [initiatorId], branchIds: branches.map((b) => b.id) };
+    let chosen = branches;
+    if (Array.isArray(selectedBranchIds) && selectedBranchIds.length) {
+      const validSet = new Set(branches.map((b) => b.id));
+      const filtered = selectedBranchIds.filter((id) => validSet.has(id));
+      if (filtered.length) chosen = branches.filter((b) => filtered.includes(b.id));
+    }
+    return { districtIds: [initiatorId], branchIds: chosen.map((b) => b.id) };
   }
   const b = await Store.getBranch(initiatorId);
   return { districtIds: b ? [b.districtId] : [], branchIds: [initiatorId] };
@@ -184,13 +190,13 @@ app.post('/api/login', async (req, res) => {
     const d = await Store.getDistrict(scopeId);
     if (!d || !d.auth) return res.status(404).json({ error: 'District not found' });
     if (h !== d.auth.passwordHash) return res.status(401).json({ error: 'Wrong password' });
-    return res.json({ token: makeToken({ role: 'district', scopeId }), role: 'district', name: d.name, mustChangePassword: !!d.auth.mustChangePassword });
+    return res.json({ token: makeToken({ role: 'district', scopeId }), role: 'district', scopeId, name: d.name, mustChangePassword: !!d.auth.mustChangePassword });
   }
   if (role === 'branch') {
     const b = await Store.getBranch(scopeId);
     if (!b || !b.auth) return res.status(404).json({ error: 'Branch not found' });
     if (h !== b.auth.passwordHash) return res.status(401).json({ error: 'Wrong password' });
-    return res.json({ token: makeToken({ role: 'branch', scopeId, districtId: b.districtId }), role: 'branch', name: b.name, districtId: b.districtId, mustChangePassword: !!b.auth.mustChangePassword });
+    return res.json({ token: makeToken({ role: 'branch', scopeId, districtId: b.districtId }), role: 'branch', scopeId, name: b.name, districtId: b.districtId, mustChangePassword: !!b.auth.mustChangePassword });
   }
   if (role === 'staff') {
     if (!scopeId || !username) return res.status(400).json({ error: 'Missing branch or username' });
@@ -199,7 +205,7 @@ app.post('/api/login', async (req, res) => {
     const st = (b.staff || []).find((s) => s.active !== false && s.username.toLowerCase() === username.toLowerCase());
     if (!st) return res.status(401).json({ error: 'Staff ID/name not found, or access deactivated' });
     if (h !== st.passwordHash) return res.status(401).json({ error: 'Wrong password' });
-    return res.json({ token: makeToken({ role: 'staff', staffId: st.id, scopeId: b.id, districtId: b.districtId }), role: 'staff', name: st.name, branchName: b.name, districtId: b.districtId, mustChangePassword: !!st.mustChangePassword });
+    return res.json({ token: makeToken({ role: 'staff', staffId: st.id, scopeId: b.id, districtId: b.districtId }), role: 'staff', scopeId: b.id, staffId: st.id, name: st.name, branchName: b.name, districtId: b.districtId, mustChangePassword: !!st.mustChangePassword });
   }
   if (role === 'officer') {
     if (!scopeId || !username) return res.status(400).json({ error: 'Missing district or username' });
@@ -208,7 +214,7 @@ app.post('/api/login', async (req, res) => {
     if (!of) return res.status(401).json({ error: 'Officer ID/name not found, or access deactivated' });
     if (h !== of.passwordHash) return res.status(401).json({ error: 'Wrong password' });
     const d = await Store.getDistrict(scopeId);
-    return res.json({ token: makeToken({ role: 'officer', officerId: of.id, scopeId }), role: 'officer', name: of.name, districtName: d ? d.name : '', mustChangePassword: !!of.mustChangePassword });
+    return res.json({ token: makeToken({ role: 'officer', officerId: of.id, scopeId }), role: 'officer', scopeId, officerId: of.id, name: of.name, districtName: d ? d.name : '', mustChangePassword: !!of.mustChangePassword });
   }
   return res.status(400).json({ error: 'Unknown role' });
 });
@@ -368,7 +374,7 @@ app.all('/api/data', async (req, res) => {
     const offDays = Array.isArray(b.offDays) ? Array.from(new Set(b.offDays)).filter((d) => d >= b.startDate && d <= b.endDate) : [];
     const targets = {}; kpis.forEach((k, i) => targets['kpi' + i] = Number((b.targets || {})['kpi' + i]) || 0);
     const initiatorId = session.role === 'ho' ? null : session.scopeId;
-    const scope = await computeScope(session.role, initiatorId);
+    const scope = await computeScope(session.role, initiatorId, b.branchIds);
     const campaign = {
       id: genId('camp'), name,
       initiatorLevel: session.role, initiatorId,
@@ -639,16 +645,20 @@ app.all('/api/data', async (req, res) => {
     const c = await Store._get('campaign:' + campaignId); if (!c) return res.status(404).json({ error: 'Campaign not found' });
     if (!c.scope.districtIds.includes(districtId)) return res.status(404).json({ error: 'This district is not part of this campaign' });
     const keys = kpiKeys(c);
+    const wd = c.workingDays || c.days;
     const elapsed = workingDaysElapsed(c);
     const district = await Store.getDistrict(districtId);
     const branches = (await Store.listBranchesByDistrict(districtId)).filter((b) => c.scope.branchIds.includes(b.id));
     const branchRows = [];
     const offMap = {};
+    const brTotActual = {}, brTotPlan = {}, brTotTarget = {}; keys.forEach((k) => { brTotActual[k] = 0; brTotPlan[k] = 0; brTotTarget[k] = 0; });
     for (const b of branches) {
       const ent = await Store._list('entry:' + campaignId + ':' + b.id + ':');
       const totals = sumTotals(ent.map((e) => entryTotals(e, keys)), keys);
       const targets = await branchEffectiveTarget(c, b.id);
-      branchRows.push({ id: b.id, name: b.name, type: b.type || 'Standard', supportOfficer: b.supportOfficer || '', totals, targets, pct: overallPct(totals, targets, c, elapsed), achieved: overallAchieved(totals, targets, c), reportedDays: distinctApprovedDates(ent) });
+      const perKpi = perKpiPace(totals, targets, c, elapsed).map((k) => Object.assign({}, k, { plan: k.target > 0 ? cumulativePlan(k.target, elapsed, wd) : 0 }));
+      branchRows.push({ id: b.id, name: b.name, type: b.type || 'Standard', supportOfficer: b.supportOfficer || '', totals, targets, perKpi, pct: overallPct(totals, targets, c, elapsed), achieved: overallAchieved(totals, targets, c), reportedDays: distinctApprovedDates(ent) });
+      keys.forEach((k, i) => { brTotActual[k] += totals[k] || 0; brTotPlan[k] += perKpi[i].plan; brTotTarget[k] += targets[k] || 0; });
       const branchRec = await Store.getBranch(b.id); const activeStaff = (branchRec.staff || []).filter((s) => s.active !== false);
       ent.filter((e) => e.status === 'approved').forEach((e) => {
         const key = e.staffId + '@' + b.id;
@@ -658,13 +668,26 @@ app.all('/api/data', async (req, res) => {
       });
     }
     branchRows.sort((a, b) => b.pct - a.pct);
+    const branchTotal = { perKpi: keys.map((k, i) => ({ key: k, name: c.kpis[i].name, unit: c.kpis[i].unit, actual: brTotActual[k], plan: brTotPlan[k], target: brTotTarget[k], pace: brTotPlan[k] > 0 ? (brTotActual[k] / brTotPlan[k] * 100) : 0 })), pct: overallPct(brTotActual, brTotTarget, c, elapsed), achieved: overallAchieved(brTotActual, brTotTarget, c) };
     const officerRows = []; for (const o of Object.values(offMap)) { const st = await staffEffectiveTarget(c, o.branchId, o.staffId, o.activeCount); officerRows.push({ name: o.name, branch: o.branch, totals: o.t, pct: overallPct(o.t, st, c, elapsed), achieved: overallAchieved(o.t, st, c) }); }
     officerRows.sort((a, b) => b.pct - a.pct);
-    const groups = {}; branchRows.forEach((b) => { const g = b.supportOfficer || 'Unassigned'; if (!groups[g]) groups[g] = { name: g, branches: 0, totals: {}, targets: {} }; groups[g].branches++; keys.forEach((k) => { groups[g].totals[k] = (groups[g].totals[k] || 0) + (b.totals[k] || 0); groups[g].targets[k] = (groups[g].targets[k] || 0) + (b.targets[k] || 0); }); });
-    const groupRows = Object.values(groups).map((g) => ({ name: g.name, branches: g.branches, totals: g.totals, pct: overallPct(g.totals, g.targets, c, elapsed), achieved: overallAchieved(g.totals, g.targets, c) }));
+    const groups = {};
+    branchRows.forEach((b) => {
+      const g = b.supportOfficer || 'Unassigned';
+      if (!groups[g]) { groups[g] = { name: g, branches: 0, totals: {}, targets: {}, plans: {} }; keys.forEach((k) => { groups[g].totals[k] = 0; groups[g].targets[k] = 0; groups[g].plans[k] = 0; }); }
+      groups[g].branches++;
+      keys.forEach((k, i) => { groups[g].totals[k] += (b.totals[k] || 0); groups[g].targets[k] += (b.targets[k] || 0); groups[g].plans[k] += (b.perKpi[i] ? b.perKpi[i].plan : 0); });
+    });
+    const groupRows = Object.values(groups).map((g) => ({
+      name: g.name, branches: g.branches, totals: g.totals, targets: g.targets,
+      perKpi: keys.map((k, i) => ({ key: k, name: c.kpis[i].name, unit: c.kpis[i].unit, actual: g.totals[k], plan: g.plans[k], target: g.targets[k], pace: g.plans[k] > 0 ? (g.totals[k] / g.plans[k] * 100) : 0 })),
+      pct: overallPct(g.totals, g.targets, c, elapsed), achieved: overallAchieved(g.totals, g.targets, c)
+    }));
+    groupRows.sort((a, b) => b.pct - a.pct);
+    const groupTotal = { perKpi: keys.map((k, i) => ({ key: k, name: c.kpis[i].name, unit: c.kpis[i].unit, actual: brTotActual[k], plan: brTotPlan[k], target: brTotTarget[k], pace: brTotPlan[k] > 0 ? (brTotActual[k] / brTotPlan[k] * 100) : 0 })), pct: branchTotal.pct, achieved: branchTotal.achieved };
     const distTargets = await districtEffectiveTarget(c, districtId);
     const distTotals = sumTotals(branchRows.map((b) => b.totals), keys);
-    return res.json({ district, campaign: c, keys, elapsed, distTotals, distTargets, perKpi: perKpiPace(distTotals, distTargets, c, elapsed), distPct: overallPct(distTotals, distTargets, c, elapsed), distAchieved: overallAchieved(distTotals, distTargets, c), branchRows, officerRows, groupRows });
+    return res.json({ district, campaign: c, keys, elapsed, distTotals, distTargets, perKpi: perKpiPace(distTotals, distTargets, c, elapsed), distPct: overallPct(distTotals, distTargets, c, elapsed), distAchieved: overallAchieved(distTotals, distTargets, c), branchRows, branchTotal, officerRows, groupRows, groupTotal });
   }
 
   // ---------------- HO DASHBOARD (campaign-scoped) ----------------
@@ -790,20 +813,31 @@ app.all('/api/data', async (req, res) => {
     const of = await Store._get('officer:' + session.scopeId + ':' + session.officerId); if (!of) return res.status(404).json({ error: 'Officer record not found' });
     const campaignId = req.query.campaignId;
     const c = campaignId ? await Store._get('campaign:' + campaignId) : null;
+    const keys = c ? kpiKeys(c) : [];
     const rows = [];
+    const totalActual = {}; const totalPlan = {}; const totalTarget = {};
+    keys.forEach((k) => { totalActual[k] = 0; totalPlan[k] = 0; totalTarget[k] = 0; });
+    const elapsed = c ? workingDaysElapsed(c) : 0;
     for (const bId of (of.branchIds || [])) {
       const b = await Store.getBranch(bId); if (!b) continue;
-      let pct = null, achieved = null;
+      let perKpi = [], pct = null, achieved = null;
       if (c && c.scope.branchIds.includes(bId)) {
-        const keys = kpiKeys(c);
         const ent = await Store._list('entry:' + campaignId + ':' + bId + ':');
         const totals = sumTotals(ent.map((e) => entryTotals(e, keys)), keys);
         const targets = await branchEffectiveTarget(c, bId);
-        pct = overallPct(totals, targets, c, workingDaysElapsed(c)); achieved = overallAchieved(totals, targets, c);
+        const wd = c.workingDays || c.days;
+        perKpi = perKpiPace(totals, targets, c, elapsed).map((k) => Object.assign({}, k, { plan: k.target > 0 ? cumulativePlan(k.target, elapsed, wd) : 0 }));
+        pct = overallPct(totals, targets, c, elapsed); achieved = overallAchieved(totals, targets, c);
+        keys.forEach((k, i) => { totalActual[k] += totals[k] || 0; totalPlan[k] += perKpi[i].plan; totalTarget[k] += targets[k] || 0; });
       }
-      rows.push({ id: b.id, name: b.name, districtId: b.districtId, pct, achieved, needsJustification: pct != null && pct < 35 });
+      rows.push({ id: b.id, name: b.name, districtId: b.districtId, perKpi, pct, achieved, needsJustification: pct != null && pct < 35 });
     }
-    return res.json({ officerName: of.name, mustChangePassword: !!of.mustChangePassword, branches: rows });
+    let total = null;
+    if (c) {
+      const totalPerKpi = keys.map((k, i) => ({ key: k, name: c.kpis[i].name, unit: c.kpis[i].unit, actual: totalActual[k], plan: totalPlan[k], target: totalTarget[k], pace: totalPlan[k] > 0 ? (totalActual[k] / totalPlan[k] * 100) : 0 }));
+      total = { perKpi: totalPerKpi, pct: overallPct(totalActual, totalTarget, c, elapsed), achieved: overallAchieved(totalActual, totalTarget, c) };
+    }
+    return res.json({ officerName: of.name, mustChangePassword: !!of.mustChangePassword, keys, kpis: c ? c.kpis : [], branches: rows, total });
   }
   if (action === 'postFeedback') {
     if (session.role !== 'officer') return res.status(403).json({ error: 'Officer only' });

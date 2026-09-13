@@ -291,3 +291,13 @@ input.numtext{font-variant-numeric:tabular-nums;text-align:right}
   .hdr-desktop-actions{display:none}
   .hdr-mobile-actions{display:flex}
 }
+
+/* ---- Total row (plan/report tables) ---- */
+.totalrow{background:linear-gradient(90deg,rgba(10,35,66,.05),rgba(245,168,0,.06));border-top:2px solid var(--navy)}
+.totalrow td{font-weight:800}
+
+/* ---- Branch picker (district campaign creation) ---- */
+.branchpick{max-height:220px;overflow-y:auto;border:1px solid var(--b);border-radius:var(--r);background:var(--s2);padding:6px;display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:2px}
+.branchpickitem{display:flex;align-items:center;gap:8px;padding:8px 10px;font-size:.82rem;font-weight:600;color:var(--t2);cursor:pointer;border-radius:8px}
+.branchpickitem:hover{background:var(--s)}
+.branchpickitem input{width:15px;height:15px;accent-color:var(--gold);flex-shrink:0}
