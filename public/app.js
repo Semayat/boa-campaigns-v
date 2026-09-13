@@ -160,6 +160,33 @@ function renderKpiTableCumulative(cum){
    +'</tbody></table></div>';
 }
 
+// Plan-vs-report table for a set of entities (branches, etc.), one column per KPI
+// (actual / plan, color-coded), plus Achieved/Pace, with a bold total row at
+// the bottom. rows: [{name, perKpi:[{name,unit,actual,plan,pace}], pct, achieved}]
+// total: {perKpi:[...], pct, achieved} | null
+function renderPlanReportTable(rows, kpis, total, nameLabel, extraCols){
+  if(!rows||!rows.length)return '<div class="empty"><i class="fas fa-inbox"></i><div>No data yet.</div></div>';
+  extraCols=extraCols||[];
+  var kpiHeaders=(kpis||[]).map(function(k){return '<th class="num">'+k.name+' <span class="muted" style="font-weight:500">(actual / plan)</span></th>';}).join('');
+  var extraHeaders=extraCols.map(function(c){return '<th'+(c.num?' class="num"':'')+'>'+c.label+'</th>';}).join('');
+  function kpiCell(k){
+    if(!k)return '<td class="num muted">—</td>';
+    return '<td class="num">'+fmtVal(k.actual,k.unit)+' <span class="muted">/ '+fmtVal(k.plan,k.unit)+'</span><br><span class="kchip '+kpiPctClass(k.pace)+'" style="margin-top:3px">'+k.pace.toFixed(0)+'%</span></td>';
+  }
+  var body=rows.map(function(r,i){
+    var kpiCells=(kpis||[]).map(function(k,ki){return kpiCell(r.perKpi&&r.perKpi[ki]);}).join('');
+    var extraCells=extraCols.map(function(c){return '<td'+(c.num?' class="num"':'')+'>'+c.get(r,i)+'</td>';}).join('');
+    return '<tr><td><b>'+r.name+'</b></td>'+kpiCells+extraCells+'<td class="num"><b>'+(r.achieved!=null?r.achieved.toFixed(1)+'%':'—')+'</b></td><td class="num">'+(r.pct!=null?'<span class="kchip '+kpiPctClass(r.pct)+'">'+r.pct.toFixed(0)+'%</span>':'—')+'</td></tr>';
+  }).join('');
+  var totalRow='';
+  if(total){
+    var totalKpiCells=(kpis||[]).map(function(k,ki){return kpiCell(total.perKpi&&total.perKpi[ki]);}).join('');
+    var totalExtraCells=extraCols.map(function(c){return '<td'+(c.num?' class="num"':'')+'></td>';}).join('');
+    totalRow='<tr class="totalrow"><td><b>Total</b></td>'+totalKpiCells+totalExtraCells+'<td class="num"><b>'+total.achieved.toFixed(1)+'%</b></td><td class="num"><span class="kchip '+kpiPctClass(total.pct)+'"><b>'+total.pct.toFixed(0)+'%</b></span></td></tr>';
+  }
+  return '<div class="tw"><table><thead><tr><th>'+nameLabel+'</th>'+kpiHeaders+extraHeaders+'<th class="num">Achieved</th><th class="num">Pace</th></tr></thead><tbody>'+body+totalRow+'</tbody></table></div>';
+}
+
 // ---- campaign cards (used on every dashboard's campaign picker) ----
 function initiatorLabel(c){return c.initiatorLevel==='ho'?'Head Office':(c.initiatorLevel==='district'?'District':'Branch');}
 function campaignCardHtml(c){

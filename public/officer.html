@@ -27,8 +27,8 @@
     </div>
 
     <div class="card">
-      <div class="stit"><div class="ico g"><i class="fas fa-store"></i></div>Assigned Branches</div>
-      <div class="sdesc">Branches below 35% pace are flagged — consider requesting justification.</div>
+      <div class="stit"><div class="ico g"><i class="fas fa-store"></i></div>Assigned Branches — Plan &amp; Report</div>
+      <div class="sdesc">Each branch's actual vs. plan, per KPI. Branches below 35% pace are flagged. The <b>Total</b> row is your combined plan and report across all assigned branches.</div>
       <div id="branchBox"></div>
     </div>
 
@@ -76,18 +76,17 @@ async function init(){
   await loadBranches();
   await loadFeedbackList();
 }
+var LAST_OFFICER_VIEW=null;
 async function loadBranches(){
   var campaignId=$('campSel').value;
   var d;try{d=await api('officerBranches',{qs:campaignId?('campaignId='+campaignId):''});}catch(e){toast(e.message,'err');return;}
-  BRANCHES=d.branches;
+  BRANCHES=d.branches; LAST_OFFICER_VIEW=d;
   if(!BRANCHES.length){$('branchBox').innerHTML='<div class="empty"><i class="fas fa-store-slash"></i><div>No branches assigned to you yet — ask your district manager.</div></div>';return;}
-  $('branchBox').innerHTML='<div class="tw"><table><thead><tr><th>Branch</th><th class="num">Achieved</th><th class="num">Pace</th><th>Status</th><th style="text-align:right">Action</th></tr></thead><tbody>'
-   +BRANCHES.map(function(b){
-     var pctCell=b.pct!=null?('<span class="kchip '+kpiPctClass(b.pct)+'">'+b.pct.toFixed(0)+'%</span>'):'<span class="muted">—</span>';
-     var achCell=b.achieved!=null?(b.achieved.toFixed(1)+'%'):'—';
-     var flag=b.needsJustification?'<span class="bdg bl"><i class="fas fa-triangle-exclamation"></i> Needs justification</span>':'<span class="bdg bx">OK</span>';
-     return '<tr><td><b>'+b.name+'</b></td><td class="num">'+achCell+'</td><td class="num">'+pctCell+'</td><td>'+flag+'</td><td style="text-align:right"><button class="btn bo bsm" onclick="openFeedbackForm(\''+b.id+'\',\''+b.name.replace(/"/g,'')+'\')"><i class="fas fa-comment-dots"></i> Feedback</button></td></tr>';
-   }).join('')+'</tbody></table></div>';
+  var extraCols=[
+    {label:'Status',get:function(r){return r.needsJustification?'<span class="bdg bl"><i class="fas fa-triangle-exclamation"></i> Needs justification</span>':'<span class="bdg bx">OK</span>';}},
+    {label:'',get:function(r){return '<button class="btn bo bsm" onclick="openFeedbackForm(\''+r.id+'\',\''+r.name.replace(/"/g,'')+'\')"><i class="fas fa-comment-dots"></i> Feedback</button>';}}
+  ];
+  $('branchBox').innerHTML=renderPlanReportTable(BRANCHES,d.kpis,d.total,'Branch',extraCols);
 }
 function openFeedbackForm(branchId,branchName){
   CUR_BRANCH=branchId;
