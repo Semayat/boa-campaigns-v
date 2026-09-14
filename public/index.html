@@ -44,7 +44,14 @@
     </div>
     <div class="fld hidden" id="distFld"><label>District</label><select id="distSel"></select></div>
     <div class="fld hidden" id="brDistFld"><label>District</label><select id="brDistSel" onchange="filterBranches()"></select></div>
-    <div class="fld hidden" id="branchFld"><label>Branch</label><select id="branchSel"></select></div>
+    <div class="fld hidden" id="branchFld">
+      <label>Branch</label>
+      <div class="searchsel">
+        <input type="text" id="branchSearch" autocomplete="off" placeholder="Type to search your branch…" oninput="filterBranchSearch()" onfocus="showBranchDropdown()">
+        <input type="hidden" id="branchSel">
+        <div id="branchDropdown" class="searchdropdown hidden"></div>
+      </div>
+    </div>
     <div class="fld hidden" id="usernameFld"><label id="usernameLbl">Staff Name or ID</label><input id="usernameInp" placeholder="e.g. Abebe Bikila or EMP-0231"></div>
     <div class="fld"><label>Password</label><input type="password" id="pw" placeholder="••••••••" onkeydown="if(event.key==='Enter')doLogin()"></div>
     <button class="btn bp" style="width:100%" id="loginBtn" onclick="doLogin()"><i class="fas fa-right-to-bracket"></i> Sign In</button>
@@ -54,7 +61,7 @@
 <div id="toast"></div>
 <script src="app.js"></script>
 <script>
-var ROLE='ho',DIR={districts:[],branches:[]};
+var ROLE='ho',DIR={districts:[],branches:[]},CURRENT_BRANCHES=[];
 async function boot(){
   try{ DIR=await (await fetch(API+'/directory')).json(); }catch(e){ toast('Could not load directory','err'); }
   fillDistricts();
@@ -67,9 +74,24 @@ function fillDistricts(){
 }
 function filterBranches(){
   var did=$('brDistSel').value;
-  var bs=(DIR.branches||[]).filter(function(b){return b.districtId===did;});
-  $('branchSel').innerHTML=bs.length?bs.map(function(b){return '<option value="'+b.id+'">'+b.name+'</option>';}).join(''):'<option value="">— no branches available —</option>';
+  CURRENT_BRANCHES=(DIR.branches||[]).filter(function(b){return b.districtId===did;});
+  $('branchSearch').value='';$('branchSel').value='';
+  renderBranchDropdown(CURRENT_BRANCHES);
 }
+function renderBranchDropdown(list){
+  var box=$('branchDropdown');
+  box.innerHTML=list.length?list.map(function(b){return '<div class="searchopt" onmousedown="pickBranch(\''+b.id+'\',\''+b.name.replace(/'/g,"\\'")+'\')">'+b.name+'</div>';}).join(''):'<div class="searchopt muted" style="cursor:default">No matching branches</div>';
+}
+function filterBranchSearch(){
+  var q=$('branchSearch').value.trim().toLowerCase();
+  $('branchSel').value=''; // typing invalidates any prior exact pick until they choose again
+  var list=q?CURRENT_BRANCHES.filter(function(b){return b.name.toLowerCase().indexOf(q)>-1;}):CURRENT_BRANCHES;
+  renderBranchDropdown(list);
+  $('branchDropdown').classList.remove('hidden');
+}
+function showBranchDropdown(){ renderBranchDropdown(CURRENT_BRANCHES); $('branchDropdown').classList.remove('hidden'); }
+function pickBranch(id,name){ $('branchSel').value=id; $('branchSearch').value=name; $('branchDropdown').classList.add('hidden'); }
+document.addEventListener('click',function(e){ if(!e.target.closest('.searchsel'))$('branchDropdown')&&$('branchDropdown').classList.add('hidden'); });
 function pickRole(r){
   ROLE=r;
   document.querySelectorAll('.rt').forEach(function(t){t.classList.toggle('active',t.dataset.role===r);});
@@ -85,7 +107,10 @@ async function doLogin(){
   var pw=$('pw').value;if(!pw){toast('Enter password','err');return;}
   var scopeId=null,username=null;
   if(ROLE==='district'||ROLE==='officer')scopeId=$('distSel').value;
-  if(ROLE==='branch'||ROLE==='staff')scopeId=$('branchSel').value;
+  if(ROLE==='branch'||ROLE==='staff'){
+    scopeId=$('branchSel').value;
+    if(!scopeId&&$('branchSearch').value.trim()){ toast('Pick a branch from the list (click a suggestion)','err'); return; }
+  }
   if((ROLE==='district'||ROLE==='officer'||ROLE==='branch'||ROLE==='staff')&&!scopeId){toast('Select a '+(ROLE==='staff'?'branch':(ROLE==='officer'?'district':ROLE)),'err');return;}
   if(ROLE==='staff'||ROLE==='officer'){username=$('usernameInp').value.trim();if(!username){toast('Enter your name or ID','err');return;}}
   var btn=$('loginBtn');btn.disabled=true;btn.innerHTML='<span class="ring"></span> Signing in…';

@@ -39,7 +39,7 @@
       <div class="pane active" id="pane-entry"><div class="card">
         <div class="stit"><div class="ico g"><i class="fas fa-pen-to-square"></i></div>Today's Entry</div>
         <div class="sdesc">Today's increment only. Your manager reviews and approves before it counts.</div>
-        <div class="row" style="margin-bottom:12px"><div style="max-width:190px"><label>Date</label><input type="date" id="entryDate"></div></div>
+        <div class="row" style="margin-bottom:12px"><div style="max-width:190px"><label>Date</label><input type="date" id="entryDate" onchange="checkDateStatus()"></div></div>
         <div id="kpiInputs" class="sg c3"></div>
         <div class="card" style="margin-top:14px;background:var(--s2);box-shadow:none">
           <div class="stit" style="font-size:.85rem"><div class="ico"><i class="fas fa-route"></i></div>Field Visits <span class="muted" style="font-weight:500">(optional)</span></div>
@@ -48,13 +48,24 @@
         </div>
         <div style="margin-top:14px"><label>Remark</label><input type="text" id="remark" placeholder="e.g. outreach, public holiday…"></div>
         <div style="margin-top:14px"><button class="btn bg" id="saveBtn" onclick="saveEntry()"><i class="fas fa-cloud-arrow-up"></i> Submit for Approval</button></div>
+        <div id="dateStatusNote" class="hidden" style="margin-top:12px"></div>
+        <div style="margin-top:16px;border-top:1px solid var(--b);padding-top:14px">
+          <a onclick="toggleJustifyForm()" style="cursor:pointer;font-size:.83rem;font-weight:700;color:var(--navy2)"><i class="fas fa-file-circle-exclamation"></i> Can't report for this date? File a leave justification instead</a>
+          <div id="justifyForm" class="hidden" style="margin-top:12px">
+            <div class="row"><div style="flex:1"><label>Reason</label><select id="justCategory"></select></div></div>
+            <div style="margin-top:10px"><label>Note <span class="muted" style="font-weight:500">(optional)</span></label><input type="text" id="justNote" placeholder="e.g. flu, family event…"></div>
+            <div style="margin-top:12px"><button class="btn bo bsm" id="justBtn" onclick="submitJustify()"><i class="fas fa-paper-plane"></i> Submit Justification</button></div>
+          </div>
+        </div>
       </div></div>
-      <div class="pane" id="pane-mine"><div class="card"><div class="stit"><div class="ico g"><i class="fas fa-list-check"></i></div>My Submissions</div><div id="mineBox"></div></div></div>
-      <div class="pane" id="pane-myplan"><div class="card"><div class="stit"><div class="ico g"><i class="fas fa-calendar-check"></i></div>My Plan</div><div class="sdesc">What you should aim for today, this week, this month, and overall.</div><div id="planBox"></div></div></div>
+      <div class="pane" id="pane-mine"><div class="card"><div class="stit"><div class="ico g"><i class="fas fa-list-check"></i></div>My Submissions</div><div id="mineBox"></div></div>
+      <div class="card"><div class="stit"><div class="ico g"><i class="fas fa-file-circle-exclamation"></i></div>My Leave Justifications</div><div id="myJustBox"></div></div></div>
+      <div class="pane" id="pane-myplan"><div class="card"><div class="stit"><div class="ico g"><i class="fas fa-calendar-check"></i></div>My Plan</div><div class="sdesc">What you should aim for today, and overall.</div><div id="planBox"></div></div></div>
       <div class="pane" id="pane-myreport"><div class="card">
         <div class="stit"><div class="ico g"><i class="fas fa-chart-line"></i></div>My Report</div>
-        <div class="row" style="margin:8px 0 14px"><div style="max-width:150px"><label>Period</label><select id="repPeriod" onchange="loadMyReport()"><option value="grand">Grand (whole campaign)</option><option value="monthly" selected>Monthly</option><option value="weekly">Weekly</option><option value="daily">Daily</option></select></div><div style="max-width:150px" id="weekWrap" class="hidden"><label>Week</label><select id="repWeek" onchange="loadMyReport()"><option value="1">Week 1</option><option value="2">Week 2</option><option value="3">Week 3</option><option value="4">Week 4</option><option value="5">Week 5</option><option value="6">Week 6</option></select></div><div style="max-width:170px" id="monthWrap" class="hidden"><label>Month</label><input type="month" id="repMonth" onchange="loadMyReport()"></div><div style="max-width:170px" id="dayWrap" class="hidden"><label>Day</label><select id="repDay" onchange="loadMyReport()"></select></div></div>
+        <div class="row" style="margin:8px 0 14px"><div style="max-width:180px"><label>Period</label><select id="repPeriod" onchange="loadMyReport()"><option value="grand" selected>Grand (whole campaign)</option><option value="daily">Daily (specific date)</option></select></div><div style="max-width:170px" id="dayWrap" class="hidden"><label>Day</label><select id="repDay" onchange="loadMyReport()"></select></div></div>
         <div id="myReportBox"></div>
+        <div class="card" style="background:var(--s2);box-shadow:none;margin-top:14px"><div class="stit" style="margin-bottom:8px"><div class="ico"><i class="fas fa-chart-line"></i></div>Pace Over Time</div><div style="position:relative;height:220px"><canvas id="trendChart"></canvas></div></div>
       </div></div>
       <div class="pane" id="pane-feedback"><div class="card"><div class="stit"><div class="ico g"><i class="fas fa-comments"></i></div>Feedback</div><div id="feedbackBox"></div></div></div>
     </div>
@@ -83,17 +94,13 @@ function tab(name,btn){document.querySelectorAll('#campDetailView .tab').forEach
 var LASTREP=null;
 async function loadMyReport(){
   var period=$('repPeriod').value;
-  $('weekWrap').classList.toggle('hidden',period!=='weekly');
-  $('monthWrap').classList.toggle('hidden',period!=='monthly');
   $('dayWrap').classList.toggle('hidden',period!=='daily');
   var qs='campaignId='+CUR.id+'&period='+period;
-  if(period==='weekly')qs+='&week='+$('repWeek').value;
-  if(period==='monthly'){if(!$('repMonth').value)$('repMonth').value=defaultReportMonth(CUR);qs+='&month='+$('repMonth').value;}
   if(period==='daily')qs+='&day='+($('repDay').value||'');
   try{var r=await api('report',{qs:qs});}catch(e){toast(e.message,'err');return;}
   LASTREP=r;
   if(period==='daily'&&$('repDay').options.length===0){if(r.dates&&r.dates.length){$('repDay').innerHTML=r.dates.map(function(d){return '<option value="'+d+'">'+d+'</option>';}).join('');$('repDay').value=r.dates[r.dates.length-1];return loadMyReport();}else $('repDay').innerHTML='<option value="">— no data —</option>';}
-  var label=period==='weekly'?('Week '+r.week+' (through '+r.asOfDate+')'):(period==='daily'?('Day '+(r.day||'—')):(period==='monthly'?(r.month+' (through '+r.asOfDate+')'):('Whole campaign (through '+r.asOfDate+')')));
+  var label=period==='daily'?('Day '+r.asOfDate+' (cumulative through this date)'):('Whole campaign (as of '+r.asOfDate+')');
   var cum=r.cumulative;
   var cumBox='<div class="card" style="background:var(--s2);box-shadow:none;margin-bottom:14px">'
     +'<div class="stit" style="margin-bottom:2px"><div class="ico g"><i class="fas fa-layer-group"></i></div>Cumulative to date</div>'
@@ -104,9 +111,13 @@ async function loadMyReport(){
     +'</div>'
     +renderKpiTableCumulative(cum)
     +'</div>';
-  var sum='<div class="sg c3" style="margin-bottom:14px">'+r.kpis.map(function(k,i){var v=r.totals['kpi'+i]||0;return statCard(k.name,fmtVal(v,k.unit),'this period');}).join('')+'</div>';
-  var trend=r.trend.length?('<div class="tw"><table><thead><tr><th>Date</th>'+r.kpis.map(function(k){return '<th class="num">'+k.name+'</th>';}).join('')+'</tr></thead><tbody>'+r.trend.map(function(t){return '<tr><td><b>'+t.date+'</b></td>'+r.kpis.map(function(k,i){return '<td class="num">'+fmtVal(t.totals['kpi'+i]||0,k.unit)+'</td>';}).join('')+'</tr>';}).join('')+'</tbody></table></div>'):'<div class="empty"><i class="fas fa-inbox"></i><div>No approved data for this period.</div></div>';
-  $('myReportBox').innerHTML='<div class="muted" style="margin-bottom:10px">'+label+'</div>'+cumBox+'<div class="stit" style="margin-bottom:2px"><div class="ico"><i class="fas fa-calendar-day"></i></div>This period only</div>'+sum+trend;
+  var dayBox='';
+  if(period==='daily'){
+    dayBox='<div class="stit" style="margin-bottom:2px"><div class="ico"><i class="fas fa-calendar-day"></i></div>That day only</div>'
+     +'<div class="sg c3" style="margin-bottom:14px">'+r.kpis.map(function(k,i){var v=r.dayTotals['kpi'+i]||0;return statCard(k.name,fmtVal(v,k.unit),r.asOfDate);}).join('')+'</div>';
+  }
+  $('myReportBox').innerHTML='<div class="muted" style="margin-bottom:10px">'+label+'</div>'+cumBox+dayBox;
+  renderTrendChart('trendChart',r.trend);
 }
 async function loadMyPlan(){
   var p;try{p=await api('myPlan',{qs:'campaignId='+CUR.id});}catch(e){$('planBox').innerHTML='';return;}
@@ -131,6 +142,7 @@ async function load(){
   $('kpiChipsBox').innerHTML='<div class="card"><div class="stit" style="margin-bottom:0"><div class="ico"><i class="fas fa-gauge"></i></div>My KPI Pace (color-coded)</div>'+renderKpiChips(VIEW.perKpi)+'</div>';
   renderInputs();
   $('entryDate').value=new Date().toISOString().slice(0,10);
+  checkDateStatus();
 }
 function renderInputs(){
   $('kpiInputs').innerHTML=VIEW.campaign.kpis.map(function(k,i){
@@ -154,11 +166,48 @@ function statusBadge(s){if(s==='approved')return '<span class="bdg bx">Approved<
 async function loadMine(){
   var d;try{d=await api('myEntries',{qs:'campaignId='+CUR.id});}catch(e){toast(e.message,'err');return;}
   var es=d.entries;
-  if(!es.length){$('mineBox').innerHTML='<div class="empty"><i class="fas fa-inbox"></i><div>No submissions yet.</div></div>';return;}
-  $('mineBox').innerHTML='<div class="tw"><table><thead><tr><th>Date</th><th>Status</th><th class="num">'+VIEW.campaign.kpis[0].name+'</th><th>Note</th></tr></thead><tbody>'
-   +es.map(function(e){var note=e.status==='rejected'?('<span class="muted">'+(e.rejectReason||'—')+'</span>'):(e.remark||'—');
-     return '<tr><td><b>'+e.date+'</b></td><td>'+statusBadge(e.status)+'</td><td class="num">'+fmtVal((e.values&&e.values.kpi0)||0,VIEW.campaign.kpis[0].unit)+'</td><td class="muted">'+note+'</td></tr>';}).join('')
+  if(!es.length){$('mineBox').innerHTML='<div class="empty"><i class="fas fa-inbox"></i><div>No submissions yet.</div></div>';}
+  else{
+    $('mineBox').innerHTML='<div class="tw"><table><thead><tr><th>Date</th><th>Status</th><th class="num">'+VIEW.campaign.kpis[0].name+'</th><th>Note</th></tr></thead><tbody>'
+     +es.map(function(e){var note=e.status==='rejected'?('<span class="muted">'+(e.rejectReason||'—')+'</span>'):(e.remark||'—');
+       return '<tr><td><b>'+e.date+'</b></td><td>'+statusBadge(e.status)+'</td><td class="num">'+fmtVal((e.values&&e.values.kpi0)||0,VIEW.campaign.kpis[0].unit)+'</td><td class="muted">'+note+'</td></tr>';}).join('')
+     +'</tbody></table></div>';
+  }
+  var jd;try{jd=await api('myJustifications',{qs:'campaignId='+CUR.id});}catch(e){return;}
+  if(!jd.justifications.length){$('myJustBox').innerHTML='<div class="empty"><i class="fas fa-file-circle-check"></i><div>No leave justifications filed.</div></div>';return;}
+  $('myJustBox').innerHTML='<div class="tw"><table><thead><tr><th>Date</th><th>Category</th><th>Status</th><th>Note</th></tr></thead><tbody>'
+   +jd.justifications.map(function(j){var note=j.status==='rejected'?('<span class="muted">'+(j.rejectReason||'—')+'</span>'):(j.note||'—');
+     return '<tr><td><b>'+j.date+'</b></td><td>'+j.category+'</td><td>'+statusBadge(j.status)+'</td><td class="muted">'+note+'</td></tr>';}).join('')
    +'</tbody></table></div>';
+}
+function toggleJustifyForm(){
+  var f=$('justifyForm');
+  if(f.classList.contains('hidden')){
+    if(!$('justCategory').options.length)$('justCategory').innerHTML=['Sick Leave','Annual Leave','Public Holiday','Official Duty','Other'].map(function(c){return '<option value="'+c+'">'+c+'</option>';}).join('');
+    f.classList.remove('hidden');
+  } else f.classList.add('hidden');
+}
+async function submitJustify(){
+  var date=$('entryDate').value; if(!date){toast('Pick a date first','err');return;}
+  var category=$('justCategory').value, note=$('justNote').value.trim();
+  var btn=$('justBtn');btn.disabled=true;btn.innerHTML='<span class="ring"></span> Submitting…';
+  try{
+    await api('submitJustification',{method:'POST',body:{campaignId:CUR.id,date:date,category:category,note:note}});
+    toast('Justification submitted — awaiting approval ✓');$('justNote').value='';$('justifyForm').classList.add('hidden');
+    checkDateStatus();
+  }catch(e){toast(e.message,'err');}
+  btn.disabled=false;btn.innerHTML='<i class="fas fa-paper-plane"></i> Submit Justification';
+}
+async function checkDateStatus(){
+  var date=$('entryDate').value; if(!date)return;
+  var jd;try{jd=await api('myJustifications',{qs:'campaignId='+CUR.id});}catch(e){return;}
+  var j=jd.justifications.find(function(x){return x.date===date&&x.status!=='rejected';});
+  var box=$('dateStatusNote'),btn=$('saveBtn');
+  if(j){
+    box.classList.remove('hidden');
+    box.innerHTML='<div class="note"><i class="fas fa-circle-info"></i> You have a '+(j.status)+' leave justification ('+j.category+') for this date — numeric entry is disabled. Choose a different date, or wait for it to be reviewed.</div>';
+    btn.disabled=true;
+  } else { box.classList.add('hidden'); btn.disabled=false; }
 }
 async function loadFeedback(){
   var d;try{d=await api('listFeedback');}catch(e){toast(e.message,'err');return;}

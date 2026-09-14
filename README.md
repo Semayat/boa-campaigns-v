@@ -12,6 +12,55 @@ database** — see "Upgrading from v4" below.
 
 ## Latest updates
 
+This is the largest single update yet — a reworked reporting model plus five
+new features. Nothing here breaks existing data; old campaigns keep working,
+they simply don't have any leave justifications filed against them yet.
+
+- **Reports simplified to Daily and Grand only.** Weekly and monthly are
+  gone — a "daily" report shows cumulative actual vs. cumulative plan
+  through that specific date (by design, this makes weekly/monthly
+  redundant: picking the right date gives you the same information). Every
+  report screen (HO, District, Branch, Staff) now works this way.
+- **Daily reports show a completeness banner.** For any specific date, the
+  report now tells you plainly whether every relevant staff member has
+  submitted or filed a leave justification for that date — green
+  "finalized" when everyone's accounted for, an amber "provisional — X of Y
+  accounted for" warning (naming who's missing) when not. The numbers still
+  show either way; this is a heads-up, not a lock.
+- **Leave justifications.** A staff member who can't report for a day
+  (sick leave, annual leave, public holiday, official duty, other) can file
+  a justification instead of a numeric entry, with an optional note. Like
+  entries, it needs branch approval. Once approved, that date is excluded
+  from **that staff member's own** working-day count, so their personal
+  daily/grand plan recalculates fairly around it — it does not affect
+  their branch's or district's figures.
+- **"Who Hasn't Submitted"** — a new tab for District (all its branches)
+  and District Officer (their assigned branches) showing, for any date,
+  exactly who's accounted for and who's still missing, broken down by
+  branch.
+- **District Officers can now drill into a branch's individual staff
+  report** and send feedback to a specific staff member directly from
+  there (staff already had the ability to reply) — not just branch-wide
+  feedback as before. The officer's branch table also gets Excel/PDF
+  export, matching the other dashboards.
+- **Officer-branch assignment is now exclusive with automatic
+  reassignment** — a branch can only belong to one officer; ticking it
+  under a different officer in the assignment screen moves it there
+  automatically, and the screen shows who currently holds each branch
+  before you do.
+- **Searchable branch picker on sign-in** — Staff and Branch sign-in now
+  search-as-you-type instead of scrolling a long dropdown, for districts
+  with many branches.
+- **Report tables are narrower** — the "(actual/plan)" header hint is
+  gone; each KPI cell now shows labeled Actual/Plan rows stacked
+  vertically, so wide multi-KPI tables fit the screen without a
+  scrollbar.
+- **A pace-over-time chart** now appears on every report screen, plotting
+  cumulative pace % across the campaign so far against a 100% reference
+  line.
+
+## Earlier updates
+
 - **Districts now choose which branches take part in a campaign** — when
   starting a campaign, a district sees a checklist of its own branches with
   a "Select All / Deselect All" toggle, and can tick/untick individual

@@ -167,11 +167,11 @@ function renderKpiTableCumulative(cum){
 function renderPlanReportTable(rows, kpis, total, nameLabel, extraCols){
   if(!rows||!rows.length)return '<div class="empty"><i class="fas fa-inbox"></i><div>No data yet.</div></div>';
   extraCols=extraCols||[];
-  var kpiHeaders=(kpis||[]).map(function(k){return '<th class="num">'+k.name+' <span class="muted" style="font-weight:500">(actual / plan)</span></th>';}).join('');
+  var kpiHeaders=(kpis||[]).map(function(k){return '<th class="num">'+k.name+'</th>';}).join('');
   var extraHeaders=extraCols.map(function(c){return '<th'+(c.num?' class="num"':'')+'>'+c.label+'</th>';}).join('');
   function kpiCell(k){
     if(!k)return '<td class="num muted">—</td>';
-    return '<td class="num">'+fmtVal(k.actual,k.unit)+' <span class="muted">/ '+fmtVal(k.plan,k.unit)+'</span><br><span class="kchip '+kpiPctClass(k.pace)+'" style="margin-top:3px">'+k.pace.toFixed(0)+'%</span></td>';
+    return '<td class="num"><div class="krow"><span class="klbl">Actual</span> '+fmtVal(k.actual,k.unit)+'</div><div class="krow muted"><span class="klbl">Plan</span> '+fmtVal(k.plan,k.unit)+'</div><span class="kchip '+kpiPctClass(k.pace)+'" style="margin-top:3px">'+k.pace.toFixed(0)+'%</span></td>';
   }
   var body=rows.map(function(r,i){
     var kpiCells=(kpis||[]).map(function(k,ki){return kpiCell(r.perKpi&&r.perKpi[ki]);}).join('');
@@ -184,7 +184,7 @@ function renderPlanReportTable(rows, kpis, total, nameLabel, extraCols){
     var totalExtraCells=extraCols.map(function(c){return '<td'+(c.num?' class="num"':'')+'></td>';}).join('');
     totalRow='<tr class="totalrow"><td><b>Total</b></td>'+totalKpiCells+totalExtraCells+'<td class="num"><b>'+total.achieved.toFixed(1)+'%</b></td><td class="num"><span class="kchip '+kpiPctClass(total.pct)+'"><b>'+total.pct.toFixed(0)+'%</b></span></td></tr>';
   }
-  return '<div class="tw"><table><thead><tr><th>'+nameLabel+'</th>'+kpiHeaders+extraHeaders+'<th class="num">Achieved</th><th class="num">Pace</th></tr></thead><tbody>'+body+totalRow+'</tbody></table></div>';
+  return '<div class="tw"><table class="plantable2"><thead><tr><th>'+nameLabel+'</th>'+kpiHeaders+extraHeaders+'<th class="num">Achieved</th><th class="num">Pace</th></tr></thead><tbody>'+body+totalRow+'</tbody></table></div>';
 }
 
 // ---- campaign cards (used on every dashboard's campaign picker) ----
@@ -271,12 +271,11 @@ function offDaysList(){ return Array.from(OFFDAYS); }
 // ---- My Plan renderer (daily / weekly / monthly / grand) ----
 function renderPlanGrid(plan){
   if(!plan.grand||!plan.grand.length)return '<div class="empty"><i class="fas fa-calendar-check"></i><div>No plan yet.</div></div>';
-  return '<div class="tw"><table class="plantable"><thead><tr><th>KPI</th><th class="num"><i class="fas fa-sun"></i> Daily</th><th class="num"><i class="fas fa-calendar-week"></i> Weekly (to date)</th><th class="num"><i class="fas fa-calendar-days"></i> Monthly (to date)</th><th class="num"><i class="fas fa-flag-checkered"></i> Grand</th></tr></thead><tbody>'
+  var offNote=plan.isOffToday?'<div class="muted" style="font-size:.78rem;margin-bottom:8px"><i class="fas fa-mug-hot"></i> Today is an off day (holiday or approved leave) \u2014 no daily plan is due.</div>':'';
+  return offNote+'<div class="tw"><table class="plantable"><thead><tr><th>KPI</th><th class="num"><i class="fas fa-sun"></i> Daily</th><th class="num"><i class="fas fa-flag-checkered"></i> Grand</th></tr></thead><tbody>'
    +plan.grand.map(function(g,i){
      var d=(plan.daily&&plan.daily[i])?plan.daily[i].plan:0;
-     var w=(plan.weekly&&plan.weekly[i])?plan.weekly[i].plan:0;
-     var m=(plan.monthly&&plan.monthly[i])?plan.monthly[i].plan:0;
-     return '<tr><td><b>'+g.name+'</b></td><td class="num">'+fmtVal(d,g.unit)+'</td><td class="num">'+fmtVal(w,g.unit)+'</td><td class="num">'+fmtVal(m,g.unit)+'</td><td class="num"><b>'+fmtVal(g.plan,g.unit)+'</b></td></tr>';
+     return '<tr><td><b>'+g.name+'</b></td><td class="num">'+fmtVal(d,g.unit)+'</td><td class="num"><b>'+fmtVal(g.plan,g.unit)+'</b></td></tr>';
    }).join('')
    +'</tbody></table></div>';
 }
@@ -365,23 +364,60 @@ function loadScript(src){return new Promise(function(res,rej){if(document.queryS
 var SHEETJS='https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
 var JSPDF='https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js';
 var JSPDF_AT='https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js';
+var CHARTJS='https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js';
+
+// ---- completeness banner (daily reports) ----
+function renderCompletenessBanner(c){
+  if(!c)return '';
+  if(c.complete){
+    return '<div class="tip" style="margin-bottom:14px"><i class="fas fa-circle-check"></i> All '+c.total+' staff accounted for on '+c.date+' \u2014 this report is finalized.</div>';
+  }
+  var missingList=c.missing.slice(0,6).map(function(m){return m.staffName+' ('+m.branchName+')';}).join(', ')+(c.missing.length>6?', +'+(c.missing.length-6)+' more':'');
+  return '<div class="note" style="margin-bottom:14px"><i class="fas fa-triangle-exclamation"></i> Provisional \u2014 only '+c.accounted+' of '+c.total+' staff accounted for on '+c.date+' (submitted or justified). Still missing: '+(missingList||'\u2014')+'.</div>';
+}
+
+// ---- trend chart (cumulative pace over time) ----
+var TREND_CHARTS={};
+async function renderTrendChart(canvasId, trend){
+  var box=document.getElementById(canvasId); if(!box)return;
+  var card=box.closest('.card')||box.parentNode;
+  if(!trend||trend.length<2){card.classList.add('hidden');return;}
+  card.classList.remove('hidden');
+  try{await loadScript(CHARTJS);}catch(e){card.classList.add('hidden');return;}
+  if(typeof Chart==='undefined'){card.classList.add('hidden');return;}
+  if(TREND_CHARTS[canvasId])TREND_CHARTS[canvasId].destroy();
+  var ctx=box.getContext('2d');
+  TREND_CHARTS[canvasId]=new Chart(ctx,{
+    type:'line',
+    data:{labels:trend.map(function(t){return t.date.slice(5);}),datasets:[
+      {label:'Cumulative Pace %',data:trend.map(function(t){return t.pct;}),borderColor:'#0A2342',backgroundColor:'rgba(10,35,66,.08)',borderWidth:2,tension:.25,pointRadius:0,fill:true},
+      {label:'On-pace (100%)',data:trend.map(function(){return 100;}),borderColor:'#F5A800',borderDash:[5,4],borderWidth:1.5,pointRadius:0,fill:false}
+    ]},
+    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{labels:{font:{size:11}}}},scales:{y:{ticks:{callback:function(v){return v+'%';}}}}}
+  });
+}
 function reportToRows(r){
-  var label=r.period==='weekly'?('Week '+r.week):(r.period==='daily'?('Day '+(r.day||'')):'Whole Campaign');
+  var label=r.period==='daily'?('Day '+(r.asOfDate||r.day||'')+' (cumulative through this date)'):('Whole Campaign (as of '+r.asOfDate+')');
+  var cum=r.cumulative;
   var rows=[];
   rows.push([(r.campaignName||'Campaign')+' — '+r.title]);
-  rows.push([r.period.charAt(0).toUpperCase()+r.period.slice(1)+' Report · '+label]);
+  rows.push([(r.period==='daily'?'Daily':'Grand')+' Report · '+label]);
   rows.push(['Generated',new Date().toLocaleString()]);
+  if(r.completeness){rows.push(['Completeness',(r.completeness.complete?'Complete':'Provisional')+' — '+r.completeness.accounted+' of '+r.completeness.total+' staff accounted for']);}
   rows.push([]);
-  rows.push(['KPI','Total']);
-  r.kpis.forEach(function(k,i){rows.push([k.name,r.totals['kpi'+i]||0]);});
+  rows.push(['Overall Achieved (%)',Math.round(cum.achieved*10)/10]);
+  rows.push(['Overall Pace (%)',Math.round(cum.pct*10)/10]);
+  rows.push([]);
+  rows.push(['KPI','Cumulative Actual','Cumulative Plan','Pace %']);
+  (cum.perKpi||[]).forEach(function(k){rows.push([k.name,k.actual,k.plan,Math.round(k.pace*10)/10]);});
   rows.push([]);
   if(r.trend&&r.trend.length){
-    rows.push(['Date'].concat(r.kpis.map(function(k){return k.name;})));
-    r.trend.forEach(function(t){rows.push([t.date].concat(r.kpis.map(function(k,i){return t.totals['kpi'+i]||0;})));});
+    rows.push(['Date','Cumulative Pace %','Cumulative Achieved %']);
+    r.trend.forEach(function(t){rows.push([t.date,t.pct,t.achieved]);});
   }
   return {rows:rows,label:label};
 }
-function fileBase(r){return ((r.campaignName||'Campaign')+'_'+r.title+'_'+r.period+(r.period==='weekly'?('_W'+r.week):(r.period==='daily'?('_'+(r.day||'')):''))).replace(/[^A-Za-z0-9_]+/g,'_');}
+function fileBase(r){return ((r.campaignName||'Campaign')+'_'+r.title+'_'+r.period+(r.period==='daily'?('_'+(r.asOfDate||r.day||'')):'')).replace(/[^A-Za-z0-9_]+/g,'_');}
 async function exportReportExcel(r){
   try{
     await loadScript(SHEETJS);
@@ -399,7 +435,7 @@ async function exportReportPDF(r){
     await loadScript(JSPDF);await loadScript(JSPDF_AT);
     if(!window.jspdf||!window.jspdf.jsPDF)throw new Error('PDF library not loaded (check internet connection)');
     var jsPDF=window.jspdf.jsPDF;var doc=new jsPDF();
-    var built=reportToRows(r);var label=built.label;
+    var built=reportToRows(r);var label=built.label;var cum=r.cumulative;
     var hasAuto=typeof doc.autoTable==='function';
     doc.setFillColor(10,35,66);doc.rect(0,0,210,26,'F');
     doc.setTextColor(245,168,0);doc.setFontSize(15);doc.setFont(undefined,'bold');
@@ -407,17 +443,81 @@ async function exportReportPDF(r){
     doc.setTextColor(255,255,255);doc.setFontSize(10);doc.setFont(undefined,'normal');
     doc.text((r.campaignName||'Campaign')+' — '+r.title,14,19);
     doc.setTextColor(10,35,66);doc.setFontSize(12);doc.setFont(undefined,'bold');
-    doc.text(r.period.charAt(0).toUpperCase()+r.period.slice(1)+' Report · '+label,14,36);
+    doc.text((r.period==='daily'?'Daily':'Grand')+' Report · '+label,14,36);
     doc.setFontSize(8);doc.setFont(undefined,'normal');doc.setTextColor(110,120,140);
-    doc.text('Generated '+new Date().toLocaleString(),14,42);
+    var genLine='Generated '+new Date().toLocaleString();
+    if(r.completeness)genLine+='   |   '+(r.completeness.complete?'Complete':'Provisional')+' — '+r.completeness.accounted+'/'+r.completeness.total+' staff accounted for';
+    doc.text(genLine,14,42);
+    doc.setFontSize(10);doc.setFont(undefined,'bold');doc.setTextColor(10,35,66);
+    doc.text('Overall: '+cum.achieved.toFixed(1)+'% achieved · '+cum.pct.toFixed(0)+'% pace',14,49);
     if(hasAuto){
-      doc.autoTable({startY:48,head:[['KPI','Total']],body:r.kpis.map(function(k,i){var v=r.totals['kpi'+i]||0;return [k.name,fmtVal(v,k.unit)];}),headStyles:{fillColor:[10,35,66]},styles:{fontSize:9}});
-      if(r.trend&&r.trend.length){doc.autoTable({startY:doc.lastAutoTable.finalY+8,head:[['Date'].concat(r.kpis.map(function(k){return k.name;}))],body:r.trend.map(function(t){return [t.date].concat(r.kpis.map(function(k,i){return fmt(t.totals['kpi'+i]||0);}));}),headStyles:{fillColor:[27,58,107]},styles:{fontSize:7.5}});}
+      doc.autoTable({startY:55,head:[['KPI','Cumulative Actual','Cumulative Plan','Pace %']],body:(cum.perKpi||[]).map(function(k){return [k.name,fmtVal(k.actual,k.unit),fmtVal(k.plan,k.unit),k.pace.toFixed(0)+'%'];}),headStyles:{fillColor:[10,35,66]},styles:{fontSize:9}});
+      if(r.trend&&r.trend.length){doc.autoTable({startY:doc.lastAutoTable.finalY+8,head:[['Date','Cumulative Pace %','Cumulative Achieved %']],body:r.trend.map(function(t){return [t.date,t.pct.toFixed(1)+'%',t.achieved.toFixed(1)+'%'];}),headStyles:{fillColor:[27,58,107]},styles:{fontSize:7.5}});}
     } else {
-      var y=52;doc.setTextColor(10,35,66);doc.setFontSize(10);doc.setFont(undefined,'bold');doc.text('Summary',14,y);y+=7;doc.setFont(undefined,'normal');doc.setFontSize(9);
-      r.kpis.forEach(function(k,i){var v=r.totals['kpi'+i]||0;doc.text(k.name+': '+fmtVal(v,k.unit),14,y);y+=6;});
+      var y=58;doc.setTextColor(10,35,66);doc.setFontSize(10);doc.setFont(undefined,'bold');doc.text('Summary',14,y);y+=7;doc.setFont(undefined,'normal');doc.setFontSize(9);
+      (cum.perKpi||[]).forEach(function(k){doc.text(k.name+': '+fmtVal(k.actual,k.unit)+' / '+fmtVal(k.plan,k.unit)+' ('+k.pace.toFixed(0)+'%)',14,y);y+=6;});
     }
     doc.save(fileBase(r)+'.pdf');
+    toast('PDF downloaded ✓');
+  }catch(e){toast('PDF export failed: '+e.message,'err');}
+}
+
+// ---- Generic export for a plan/report table (rows + total, one column per KPI) ----
+function planReportToRows(data){
+  // data: {title, kpis, rows, total, nameLabel}
+  var rows=[];
+  rows.push([data.title||'Report']);
+  rows.push(['Generated',new Date().toLocaleString()]);
+  rows.push([]);
+  var header=[data.nameLabel||'Name'];
+  data.kpis.forEach(function(k){header.push(k.name+' Actual',k.name+' Plan',k.name+' Pace %');});
+  header.push('Achieved %','Pace %');
+  rows.push(header);
+  function rowFor(r){
+    var line=[r.name];
+    data.kpis.forEach(function(k,i){var c=r.perKpi&&r.perKpi[i];line.push(c?c.actual:0,c?c.plan:0,c?Math.round(c.pace*10)/10:0);});
+    line.push(r.achieved!=null?Math.round(r.achieved*10)/10:'',r.pct!=null?Math.round(r.pct*10)/10:'');
+    return line;
+  }
+  (data.rows||[]).forEach(function(r){rows.push(rowFor(r));});
+  if(data.total)rows.push(rowFor(Object.assign({name:'Total'},data.total)));
+  return rows;
+}
+async function exportPlanReportExcel(data){
+  try{
+    await loadScript(SHEETJS);
+    var rows=planReportToRows(data);
+    var ws=XLSX.utils.aoa_to_sheet(rows);
+    var wb=XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb,ws,'Report');
+    XLSX.writeFile(wb,(data.title||'report').replace(/[^A-Za-z0-9_]+/g,'_')+'.xlsx');
+    toast('Excel downloaded ✓');
+  }catch(e){toast('Excel export failed: '+e.message,'err');}
+}
+async function exportPlanReportPDF(data){
+  try{
+    await loadScript(JSPDF);await loadScript(JSPDF_AT);
+    if(!window.jspdf||!window.jspdf.jsPDF)throw new Error('PDF library not loaded (check internet connection)');
+    var jsPDF=window.jspdf.jsPDF;var doc=new jsPDF({orientation:data.kpis.length>2?'landscape':'portrait'});
+    var hasAuto=typeof doc.autoTable==='function';
+    doc.setFillColor(10,35,66);doc.rect(0,0,297,22,'F');
+    doc.setTextColor(245,168,0);doc.setFontSize(14);doc.setFont(undefined,'bold');
+    doc.text('BoA Campaigns',14,11);
+    doc.setTextColor(255,255,255);doc.setFontSize(9);doc.setFont(undefined,'normal');
+    doc.text(data.title||'Report',14,17);
+    var head=[[data.nameLabel||'Name'].concat(data.kpis.map(function(k){return k.name;})).concat(['Achieved','Pace'])];
+    function rowText(r){
+      var line=[r.name];
+      data.kpis.forEach(function(k,i){var c=r.perKpi&&r.perKpi[i];line.push(c?(fmtVal(c.actual,c.unit)+' / '+fmtVal(c.plan,c.unit)+' ('+c.pace.toFixed(0)+'%)'):'—');});
+      line.push(r.achieved!=null?r.achieved.toFixed(1)+'%':'—',r.pct!=null?r.pct.toFixed(0)+'%':'—');
+      return line;
+    }
+    var body=(data.rows||[]).map(rowText);
+    if(data.total)body.push(rowText(Object.assign({name:'Total'},data.total)));
+    if(hasAuto){
+      doc.autoTable({startY:28,head:head,body:body,headStyles:{fillColor:[10,35,66]},styles:{fontSize:8}});
+    }
+    doc.save((data.title||'report').replace(/[^A-Za-z0-9_]+/g,'_')+'.pdf');
     toast('PDF downloaded ✓');
   }catch(e){toast('PDF export failed: '+e.message,'err');}
 }

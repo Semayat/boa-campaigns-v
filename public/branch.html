@@ -62,8 +62,9 @@
         <div id="planBox"></div>
       </div></div>
       <div class="pane" id="pane-reports"><div class="card">
-        <div class="row" style="margin:8px 0 14px"><div style="max-width:150px"><label>Period</label><select id="repPeriod" onchange="loadReport()"><option value="grand">Grand (whole campaign)</option><option value="monthly" selected>Monthly</option><option value="weekly">Weekly</option><option value="daily">Daily</option></select></div><div style="max-width:150px" id="weekWrap" class="hidden"><label>Week</label><select id="repWeek" onchange="loadReport()"><option value="1">Week 1</option><option value="2">Week 2</option><option value="3">Week 3</option><option value="4">Week 4</option><option value="5">Week 5</option><option value="6">Week 6</option></select></div><div style="max-width:170px" id="monthWrap" class="hidden"><label>Month</label><input type="month" id="repMonth" onchange="loadReport()"></div><div style="max-width:170px" id="dayWrap" class="hidden"><label>Day</label><select id="repDay" onchange="loadReport()"></select></div><div style="flex:1"></div><button class="btn bo bsm" id="xlsBtn" onclick="exportReportExcel(LASTREP)" disabled><i class="fas fa-file-excel"></i> Excel</button><button class="btn bo bsm" id="pdfBtn" onclick="exportReportPDF(LASTREP)" disabled><i class="fas fa-file-pdf"></i> PDF</button></div>
+        <div class="row" style="margin:8px 0 14px"><div style="max-width:180px"><label>Period</label><select id="repPeriod" onchange="loadReport()"><option value="grand" selected>Grand (whole campaign)</option><option value="daily">Daily (specific date)</option></select></div><div style="max-width:170px" id="dayWrap" class="hidden"><label>Day</label><select id="repDay" onchange="loadReport()"></select></div><div style="flex:1"></div><button class="btn bo bsm" id="xlsBtn" onclick="exportReportExcel(LASTREP)" disabled><i class="fas fa-file-excel"></i> Excel</button><button class="btn bo bsm" id="pdfBtn" onclick="exportReportPDF(LASTREP)" disabled><i class="fas fa-file-pdf"></i> PDF</button></div>
         <div id="reportBox"></div>
+        <div class="card" style="background:var(--s2);box-shadow:none;margin-top:14px"><div class="stit" style="margin-bottom:8px"><div class="ico"><i class="fas fa-chart-line"></i></div>Pace Over Time</div><div style="position:relative;height:220px"><canvas id="trendChart"></canvas></div></div>
       </div></div>
     </div>
   </div>
@@ -159,9 +160,10 @@ async function loadMyPlan(){
 }
 async function loadApprovals(){
   var d;try{d=await api('pendingApprovals',{qs:'campaignId='+CUR.id});}catch(e){return;}
-  $('pendBadge').textContent=d.pending.length?(' ('+d.pending.length+')'):'';
-  if(!d.pending.length){$('approvalsBox').innerHTML='<div class="empty"><i class="fas fa-circle-check"></i><div>All caught up.</div></div>';return;}
-  $('approvalsBox').innerHTML=d.pending.map(function(e){
+  var jd;try{jd=await api('pendingJustifications',{qs:'campaignId='+CUR.id});}catch(e){jd={pending:[]};}
+  var totalPending=d.pending.length+jd.pending.length;
+  $('pendBadge').textContent=totalPending?(' ('+totalPending+')'):'';
+  var entriesHtml=d.pending.map(function(e){
     var kpiLine=d.kpis.map(function(k,i){var v=(e.values&&e.values['kpi'+i])||0;return '<span class="pill">'+k.name+': '+fmtVal(v,k.unit)+'</span>';}).join(' ');
     var remark=e.remark?('<div class="muted" style="margin-top:4px;font-size:.75rem">Remark: '+e.remark+'</div>'):'';
     var rid='ap_'+e.staffId+'_'+e.date;
@@ -172,11 +174,29 @@ async function loadApprovals(){
       +'<div id="'+rid+'_confirmReject" class="hidden" style="text-align:right;margin-top:6px"><button class="btn bl bsm" onclick="decide(\''+e.staffId+'\',\''+e.date+'\',\'reject\',\''+rid+'\')"><i class="fas fa-check"></i> Confirm Reject</button></div>'
     +'</div>';
   }).join('');
+  var justHtml=jd.pending.map(function(j){
+    var rid='jp_'+j.staffId+'_'+j.date;
+    return '<div class="card" style="background:rgba(245,168,0,.06);box-shadow:none;margin-bottom:10px">'
+      +'<div><b>'+j.staffName+'</b> <span class="muted">· '+j.date+'</span> <span class="bdg bf">'+j.category+'</span>'+(j.note?('<div class="muted" style="margin-top:4px;font-size:.75rem">Note: '+j.note+'</div>'):'')+'</div>'
+      +'<div id="'+rid+'_reasonWrap" class="hidden" style="margin-top:8px"><input id="'+rid+'_reason" placeholder="Reason for rejection (optional)" style="max-width:420px"></div>'
+      +'<div class="row" style="margin-top:10px;justify-content:flex-end"><button class="btn bo bsm" onclick="showReject(\''+rid+'\')"><i class="fas fa-xmark"></i> Reject</button><button class="btn bg bsm" onclick="decideJust(\''+j.staffId+'\',\''+j.date+'\',\'approve\',\''+rid+'\')"><i class="fas fa-check"></i> Approve</button></div>'
+      +'<div id="'+rid+'_confirmReject" class="hidden" style="text-align:right;margin-top:6px"><button class="btn bl bsm" onclick="decideJust(\''+j.staffId+'\',\''+j.date+'\',\'reject\',\''+rid+'\')"><i class="fas fa-check"></i> Confirm Reject</button></div>'
+    +'</div>';
+  }).join('');
+  if(!totalPending){$('approvalsBox').innerHTML='<div class="empty"><i class="fas fa-circle-check"></i><div>All caught up.</div></div>';return;}
+  var sections='';
+  if(d.pending.length)sections+='<div class="stit" style="font-size:.85rem;margin-bottom:8px"><div class="ico g"><i class="fas fa-pen-to-square"></i></div>Daily Entries ('+d.pending.length+')</div>'+entriesHtml;
+  if(jd.pending.length)sections+='<div class="stit" style="font-size:.85rem;margin:16px 0 8px"><div class="ico"><i class="fas fa-file-circle-exclamation"></i></div>Leave Justifications ('+jd.pending.length+')</div>'+justHtml;
+  $('approvalsBox').innerHTML=sections;
 }
 function showReject(rid){$(rid+'_reasonWrap').classList.remove('hidden');$(rid+'_confirmReject').classList.remove('hidden');}
 async function decide(staffId,date,decision,rid){
   var reason=decision==='reject'?(($(rid+'_reason')||{}).value||''):'';
   try{await api('decideApproval',{method:'POST',body:{campaignId:CUR.id,staffId:staffId,date:date,decision:decision,reason:reason}});toast(decision==='approve'?'Approved ✓':'Rejected');await loadApprovals();await loadDetail();}catch(e){toast(e.message,'err');}
+}
+async function decideJust(staffId,date,decision,rid){
+  var reason=decision==='reject'?(($(rid+'_reason')||{}).value||''):'';
+  try{await api('decideJustification',{method:'POST',body:{campaignId:CUR.id,staffId:staffId,date:date,decision:decision,reason:reason}});toast(decision==='approve'?'Justification approved ✓':'Justification rejected');await loadApprovals();await loadDetail();}catch(e){toast(e.message,'err');}
 }
 async function loadTargetsPane(){
   var d;try{d=await api('targetsView',{qs:'campaignId='+CUR.id+'&level=staff'});}catch(e){$('targetsBox').innerHTML='<div class="empty"><i class="fas fa-user-plus"></i><div>Add staff first.</div></div>';return;}
@@ -199,19 +219,16 @@ function dtab(name,btn){document.querySelectorAll('#detailView .tab').forEach(fu
 var LASTREP=null;
 async function loadReport(){
   var period=$('repPeriod').value;
-  $('weekWrap').classList.toggle('hidden',period!=='weekly');
-  $('monthWrap').classList.toggle('hidden',period!=='monthly');
   $('dayWrap').classList.toggle('hidden',period!=='daily');
   var qs='campaignId='+CUR.id+'&period='+period;
-  if(period==='weekly')qs+='&week='+$('repWeek').value;
-  if(period==='monthly'){if(!$('repMonth').value)$('repMonth').value=defaultReportMonth(CUR);qs+='&month='+$('repMonth').value;}
   if(period==='daily')qs+='&day='+($('repDay').value||'');
   try{var r=await api('report',{qs:qs});}catch(e){toast(e.message,'err');return;}
   LASTREP=r;
   if(period==='daily'&&$('repDay').options.length===0){if(r.dates&&r.dates.length){$('repDay').innerHTML=r.dates.map(function(d){return '<option value="'+d+'">'+d+'</option>';}).join('');$('repDay').value=r.dates[r.dates.length-1];return loadReport();}else $('repDay').innerHTML='<option value="">— no data —</option>';}
   $('xlsBtn').disabled=false;$('pdfBtn').disabled=false;
-  var label=period==='weekly'?('Week '+r.week+' (through '+r.asOfDate+')'):(period==='daily'?('Day '+(r.day||'—')):(period==='monthly'?(r.month+' (through '+r.asOfDate+')'):('Whole campaign (through '+r.asOfDate+')')));
+  var label=period==='daily'?('Day '+r.asOfDate+' (cumulative through this date)'):('Whole campaign (as of '+r.asOfDate+')');
   var cum=r.cumulative;
+  var banner=period==='daily'?renderCompletenessBanner(r.completeness):'';
   var cumBox='<div class="card" style="background:var(--s2);box-shadow:none;margin-bottom:14px">'
     +'<div class="stit" style="margin-bottom:2px"><div class="ico g"><i class="fas fa-layer-group"></i></div>Cumulative to date</div>'
     +'<div class="sdesc">Cumulative actual vs. cumulative plan, from campaign start through '+r.asOfDate+'.</div>'
@@ -221,9 +238,13 @@ async function loadReport(){
     +'</div>'
     +renderKpiTableCumulative(cum)
     +'</div>';
-  var sum='<div class="sg c3" style="margin-bottom:14px">'+r.kpis.map(function(k,i){var v=r.totals['kpi'+i]||0;return statCard(k.name,fmtVal(v,k.unit),'this period');}).join('')+'</div>';
-  var trend=r.trend.length?('<div class="tw"><table><thead><tr><th>Date</th>'+r.kpis.map(function(k){return '<th class="num">'+k.name+'</th>';}).join('')+'</tr></thead><tbody>'+r.trend.map(function(t){return '<tr><td><b>'+t.date+'</b></td>'+r.kpis.map(function(k,i){return '<td class="num">'+fmtVal(t.totals['kpi'+i]||0,k.unit)+'</td>';}).join('')+'</tr>';}).join('')+'</tbody></table></div>'):'<div class="empty"><i class="fas fa-inbox"></i><div>No approved data for this period.</div></div>';
-  $('reportBox').innerHTML='<div class="muted" style="margin-bottom:10px">'+r.title+' · '+label+'</div>'+cumBox+'<div class="stit" style="margin-bottom:2px"><div class="ico"><i class="fas fa-calendar-day"></i></div>This period only</div>'+sum+trend;
+  var dayBox='';
+  if(period==='daily'){
+    dayBox='<div class="stit" style="margin-bottom:2px"><div class="ico"><i class="fas fa-calendar-day"></i></div>That day only</div>'
+     +'<div class="sg c3" style="margin-bottom:14px">'+r.kpis.map(function(k,i){var v=r.dayTotals['kpi'+i]||0;return statCard(k.name,fmtVal(v,k.unit),r.asOfDate);}).join('')+'</div>';
+  }
+  $('reportBox').innerHTML='<div class="muted" style="margin-bottom:10px">'+r.title+' · '+label+'</div>'+banner+cumBox+dayBox;
+  renderTrendChart('trendChart',r.trend);
 }
 
 // ---- staff management (unchanged pattern) ----

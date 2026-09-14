@@ -23,19 +23,36 @@
 
     <div class="card">
       <label>Campaign</label>
-      <select id="campSel" onchange="loadBranches()"></select>
+      <select id="campSel" onchange="closeStaffDrill();loadBranches();loadAttendance();"></select>
     </div>
 
     <div class="card">
-      <div class="stit"><div class="ico g"><i class="fas fa-store"></i></div>Assigned Branches — Plan &amp; Report</div>
-      <div class="sdesc">Each branch's actual vs. plan, per KPI. Branches below 35% pace are flagged. The <b>Total</b> row is your combined plan and report across all assigned branches.</div>
+      <div class="row" style="justify-content:space-between;align-items:flex-start">
+        <div><div class="stit"><div class="ico g"><i class="fas fa-store"></i></div>Assigned Branches — Plan &amp; Report</div>
+        <div class="sdesc">Each branch's actual vs. plan, per KPI. Branches below 35% pace are flagged. The <b>Total</b> row is your combined plan and report across all assigned branches.</div></div>
+        <div class="row" style="gap:6px"><button class="btn bo bsm" onclick="exportOfficerExcel()"><i class="fas fa-file-excel"></i> Excel</button><button class="btn bo bsm" onclick="exportOfficerPDF()"><i class="fas fa-file-pdf"></i> PDF</button></div>
+      </div>
       <div id="branchBox"></div>
     </div>
 
+    <div id="staffDrillCard" class="card hidden">
+      <div class="stit"><div class="ico g"><i class="fas fa-users"></i></div>Staff Report — <span id="drillBranchName"></span></div>
+      <div class="sdesc">Individual staff performance for this branch.</div>
+      <div id="staffDrillBox"></div>
+      <div class="row" style="margin-top:10px;justify-content:flex-end"><button class="btn bo bsm" onclick="closeStaffDrill()"><i class="fas fa-xmark"></i> Close</button></div>
+    </div>
+
+    <div class="card">
+      <div class="stit"><div class="ico g"><i class="fas fa-user-clock"></i></div>Who Hasn't Submitted</div>
+      <div class="sdesc">For any date, see who's submitted or justified across your assigned branches, and who's still missing.</div>
+      <div class="row" style="margin-bottom:8px"><div style="max-width:190px"><label>Date</label><input type="date" id="attDate" onchange="loadAttendance()"></div></div>
+      <div id="attendanceBox"></div>
+    </div>
+
     <div id="feedbackFormCard" class="card hidden">
-      <div class="stit"><div class="ico g"><i class="fas fa-comment-dots"></i></div>Give Feedback — <span id="fbBranchName"></span></div>
+      <div class="stit"><div class="ico g"><i class="fas fa-comment-dots"></i></div>Give Feedback — <span id="fbBranchName"></span><span id="fbStaffNameWrap" class="hidden"> · <span id="fbStaffName"></span></span></div>
       <div class="row" style="margin-top:8px">
-        <div style="flex:1"><label>Scope</label><select id="fbScope"><option value="branch">Whole branch</option></select></div>
+        <div style="flex:1"><label>Scope</label><select id="fbScope" disabled><option value="branch">Whole branch</option></select></div>
         <div style="flex:1"><label>Period</label><select id="fbPeriod"><option value="daily">Daily</option><option value="weekly" selected>Weekly</option></select></div>
       </div>
       <div style="margin-top:10px"><label>Message</label><textarea id="fbMessage" rows="3" style="width:100%;padding:10px;border:1px solid var(--b);border-radius:var(--r);font-family:inherit" placeholder="e.g. Your pace is below 35% this week — please explain what is affecting deposit mobilization."></textarea></div>
@@ -51,8 +68,9 @@
 <div id="toast"></div>
 <script src="app.js"></script>
 <script>
-var S=requireRole('officer'),CAMPAIGNS=[],BRANCHES=[],CUR_BRANCH=null;
+var S=requireRole('officer'),CAMPAIGNS=[],BRANCHES=[],CUR_BRANCH=null,CUR_STAFF=null;
 document.getElementById('hdr').innerHTML=renderHeader('District Officer','fas fa-user-shield');
+function statCard(label,val,sub,cls,pctv,fillcls){var bar=pctv!=null?'<div class="pbar"><div class="pfill '+(fillcls||'')+'" style="width:'+Math.min(100,pctv)+'%"></div></div>':'';return '<div class="sc '+(cls||'')+'"><div class="sv">'+val+'</div><div class="sl">'+label+'</div><div class="sx">'+(sub||'')+'</div>'+bar+'</div>';}
 
 async function setPassword(){
   var p1=$('newPw').value,p2=$('newPw2').value;
@@ -73,7 +91,9 @@ async function init(){
     html+='<optgroup label="'+groups[lvl]+'">'+items.map(function(c){return '<option value="'+c.id+'">'+c.name+'</option>';}).join('')+'</optgroup>';
   });
   $('campSel').innerHTML=html||'<option value="">— no campaigns —</option>';
+  if(!$('attDate').value)$('attDate').value=new Date().toISOString().slice(0,10);
   await loadBranches();
+  await loadAttendance();
   await loadFeedbackList();
 }
 var LAST_OFFICER_VIEW=null;
@@ -84,23 +104,60 @@ async function loadBranches(){
   if(!BRANCHES.length){$('branchBox').innerHTML='<div class="empty"><i class="fas fa-store-slash"></i><div>No branches assigned to you yet — ask your district manager.</div></div>';return;}
   var extraCols=[
     {label:'Status',get:function(r){return r.needsJustification?'<span class="bdg bl"><i class="fas fa-triangle-exclamation"></i> Needs justification</span>':'<span class="bdg bx">OK</span>';}},
-    {label:'',get:function(r){return '<button class="btn bo bsm" onclick="openFeedbackForm(\''+r.id+'\',\''+r.name.replace(/"/g,'')+'\')"><i class="fas fa-comment-dots"></i> Feedback</button>';}}
+    {label:'',get:function(r){return '<button class="btn bo bsm" onclick="openStaffDrill(\''+r.id+'\',\''+r.name.replace(/"/g,'')+'\')" style="margin-bottom:4px"><i class="fas fa-users"></i> Staff</button> <button class="btn bo bsm" onclick="openFeedbackForm(\''+r.id+'\',\''+r.name.replace(/"/g,'')+'\')"><i class="fas fa-comment-dots"></i> Feedback</button>';}}
   ];
   $('branchBox').innerHTML=renderPlanReportTable(BRANCHES,d.kpis,d.total,'Branch',extraCols);
 }
-function openFeedbackForm(branchId,branchName){
-  CUR_BRANCH=branchId;
+async function openStaffDrill(branchId,branchName){
+  var campaignId=$('campSel').value; if(!campaignId){toast('Pick a campaign first','err');return;}
+  var d;try{d=await api('officerBranchStaff',{qs:'campaignId='+campaignId+'&branchId='+branchId});}catch(e){toast(e.message,'err');return;}
+  $('drillBranchName').textContent=branchName;
+  if(!d.staff.length){$('staffDrillBox').innerHTML='<div class="empty"><i class="fas fa-user-slash"></i><div>No active staff at this branch.</div></div>';}
+  else{
+    var extraCols=[{label:'',get:function(r){return '<button class="btn bo bsm" onclick="openFeedbackForm(\''+branchId+'\',\''+branchName.replace(/"/g,'')+'\',\''+r.id+'\',\''+r.name.replace(/"/g,'')+'\')"><i class="fas fa-comment-dots"></i> Feedback</button>';}}];
+    $('staffDrillBox').innerHTML=renderPlanReportTable(d.staff,d.kpis,null,'Staff',extraCols);
+  }
+  $('staffDrillCard').classList.remove('hidden');
+  $('staffDrillCard').scrollIntoView({behavior:'smooth'});
+}
+function closeStaffDrill(){$('staffDrillCard').classList.add('hidden');}
+function exportOfficerExcel(){
+  if(!LAST_OFFICER_VIEW||!BRANCHES.length){toast('No data to export yet','err');return;}
+  exportPlanReportExcel({title:'Officer Branch Report — '+(S.name||''),kpis:LAST_OFFICER_VIEW.kpis,rows:BRANCHES,total:LAST_OFFICER_VIEW.total,nameLabel:'Branch'});
+}
+function exportOfficerPDF(){
+  if(!LAST_OFFICER_VIEW||!BRANCHES.length){toast('No data to export yet','err');return;}
+  exportPlanReportPDF({title:'Officer Branch Report — '+(S.name||''),kpis:LAST_OFFICER_VIEW.kpis,rows:BRANCHES,total:LAST_OFFICER_VIEW.total,nameLabel:'Branch'});
+}
+async function loadAttendance(){
+  var date=$('attDate').value; if(!date)return;
+  var campaignId=$('campSel').value;
+  var qs='date='+date+(campaignId?('&campaignId='+campaignId):'');
+  var d;try{d=await api('submissionStatus',{qs:qs});}catch(e){$('attendanceBox').innerHTML='<div class="empty"><i class="fas fa-circle-info"></i><div>Pick a campaign above to check attendance.</div></div>';return;}
+  var summary='<div class="sg c2" style="margin-bottom:14px">'
+    +statCard('Accounted For',d.accounted+' / '+d.total,d.complete?'All accounted for':'Still incomplete','gold',d.total?(d.accounted/d.total*100):0,'gold')
+    +statCard('Missing',d.missing.length,d.missing.length?'need to submit or justify':'none')
+  +'</div>';
+  var missingTable=d.missing.length?('<div class="tw"><table><thead><tr><th>Staff</th><th>Branch</th></tr></thead><tbody>'
+    +d.missing.map(function(m){return '<tr><td><b>'+m.staffName+'</b></td><td class="muted">'+m.branchName+'</td></tr>';}).join('')
+    +'</tbody></table></div>'):'<div class="tip"><i class="fas fa-circle-check"></i> Nobody is missing for this date.</div>';
+  $('attendanceBox').innerHTML=summary+missingTable;
+}
+function openFeedbackForm(branchId,branchName,staffId,staffName){
+  CUR_BRANCH=branchId; CUR_STAFF=staffId||null;
   $('fbBranchName').textContent=branchName;
+  $('fbStaffNameWrap').classList.toggle('hidden',!staffId);
+  if(staffId)$('fbStaffName').textContent=staffName;
   $('fbMessage').value='';
   $('feedbackFormCard').classList.remove('hidden');
   $('feedbackFormCard').scrollIntoView({behavior:'smooth'});
 }
-function closeFeedbackForm(){$('feedbackFormCard').classList.add('hidden');CUR_BRANCH=null;}
+function closeFeedbackForm(){$('feedbackFormCard').classList.add('hidden');CUR_BRANCH=null;CUR_STAFF=null;}
 async function sendFeedback(){
   var msg=$('fbMessage').value.trim();if(!msg){toast('Write a message first','err');return;}
   var btn=$('sendFbBtn');btn.disabled=true;btn.innerHTML='<span class="ring"></span> Sending…';
   try{
-    await api('postFeedback',{method:'POST',body:{branchId:CUR_BRANCH,campaignId:$('campSel').value||null,period:$('fbPeriod').value,message:msg}});
+    await api('postFeedback',{method:'POST',body:{branchId:CUR_BRANCH,staffId:CUR_STAFF,campaignId:$('campSel').value||null,period:$('fbPeriod').value,message:msg}});
     toast('Feedback sent ✓');closeFeedbackForm();await loadFeedbackList();
   }catch(e){toast(e.message,'err');}
   btn.disabled=false;btn.innerHTML='<i class="fas fa-paper-plane"></i> Send Feedback';

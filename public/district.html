@@ -13,6 +13,7 @@
 
   <div class="tabs">
     <button class="tab active" id="navtab-campaigns" onclick="mtab('campaigns',this)"><i class="fas fa-flag"></i> Campaigns</button>
+    <button class="tab" id="navtab-attendance" onclick="mtab('attendance',this)"><i class="fas fa-user-clock"></i> Who Hasn't Submitted</button>
     <button class="tab" id="navtab-officers" onclick="mtab('officers',this)"><i class="fas fa-user-shield"></i> District Officers</button>
     <button class="tab" id="navtab-feedback" onclick="mtab('feedback',this)"><i class="fas fa-comments"></i> Feedback</button>
   </div>
@@ -72,8 +73,9 @@
         <div id="validationBox" style="margin-top:10px"></div>
       </div></div>
       <div class="pane" id="pane-reports"><div class="card">
-        <div class="row" style="margin:8px 0 14px"><div style="max-width:150px"><label>Period</label><select id="repPeriod" onchange="loadReport()"><option value="grand">Grand (whole campaign)</option><option value="monthly" selected>Monthly</option><option value="weekly">Weekly</option><option value="daily">Daily</option></select></div><div style="max-width:150px" id="weekWrap" class="hidden"><label>Week</label><select id="repWeek" onchange="loadReport()"><option value="1">Week 1</option><option value="2">Week 2</option><option value="3">Week 3</option><option value="4">Week 4</option><option value="5">Week 5</option><option value="6">Week 6</option></select></div><div style="max-width:170px" id="monthWrap" class="hidden"><label>Month</label><input type="month" id="repMonth" onchange="loadReport()"></div><div style="max-width:170px" id="dayWrap" class="hidden"><label>Day</label><select id="repDay" onchange="loadReport()"></select></div><div style="flex:1"></div><button class="btn bo bsm" id="xlsBtn" onclick="exportReportExcel(LASTREP)" disabled><i class="fas fa-file-excel"></i> Excel</button><button class="btn bo bsm" id="pdfBtn" onclick="exportReportPDF(LASTREP)" disabled><i class="fas fa-file-pdf"></i> PDF</button></div>
+        <div class="row" style="margin:8px 0 14px"><div style="max-width:180px"><label>Period</label><select id="repPeriod" onchange="loadReport()"><option value="grand" selected>Grand (whole campaign)</option><option value="daily">Daily (specific date)</option></select></div><div style="max-width:170px" id="dayWrap" class="hidden"><label>Day</label><select id="repDay" onchange="loadReport()"></select></div><div style="flex:1"></div><button class="btn bo bsm" id="xlsBtn" onclick="exportReportExcel(LASTREP)" disabled><i class="fas fa-file-excel"></i> Excel</button><button class="btn bo bsm" id="pdfBtn" onclick="exportReportPDF(LASTREP)" disabled><i class="fas fa-file-pdf"></i> PDF</button></div>
         <div id="reportBox"></div>
+        <div class="card" style="background:var(--s2);box-shadow:none;margin-top:14px"><div class="stit" style="margin-bottom:8px"><div class="ico"><i class="fas fa-chart-line"></i></div>Pace Over Time</div><div style="position:relative;height:220px"><canvas id="trendChart"></canvas></div></div>
       </div></div>
     </div>
   </div>
@@ -86,6 +88,18 @@
       <div id="genPwBox"></div>
     </div>
     <div class="card"><div class="stit"><div class="ico"><i class="fas fa-user-shield"></i></div>Officers</div><div id="officerListBox"></div></div>
+  </div>
+
+  <div class="pane" id="pane-attendance">
+    <div class="card">
+      <div class="stit"><div class="ico g"><i class="fas fa-user-clock"></i></div>Who Hasn't Submitted</div>
+      <div class="sdesc">For any date, see which staff have submitted or filed a leave justification, and who's still missing.</div>
+      <div class="row" style="margin:8px 0 14px">
+        <div style="max-width:260px"><label>Campaign</label><select id="attCampSel" onchange="loadAttendance()"></select></div>
+        <div style="max-width:190px"><label>Date</label><input type="date" id="attDate" onchange="loadAttendance()"></div>
+      </div>
+      <div id="attendanceBox"></div>
+    </div>
   </div>
 
   <div class="pane" id="pane-feedback">
@@ -102,7 +116,32 @@ document.getElementById('hdr').innerHTML=renderHeader('District','fas fa-sitemap
   {sel:'#navtab-feedback',icon:'fas fa-comments',label:'Feedback'}
 ]);
 function statCard(label,val,sub,cls,pctv,fillcls){var bar=pctv!=null?'<div class="pbar"><div class="pfill '+(fillcls||'')+'" style="width:'+Math.min(100,pctv)+'%"></div></div>':'';return '<div class="sc '+(cls||'')+'"><div class="sv">'+val+'</div><div class="sl">'+label+'</div><div class="sx">'+(sub||'')+'</div>'+bar+'</div>';}
-function mtab(name,btn){document.querySelectorAll('.wrap>.tabs>.tab').forEach(function(t){t.classList.remove('active');});btn.classList.add('active');['campaigns','officers','feedback'].forEach(function(n){$('pane-'+n).classList.toggle('active',n===name);});if(name==='officers')loadOfficers();if(name==='feedback')loadFeedback();}
+function mtab(name,btn){document.querySelectorAll('.wrap>.tabs>.tab').forEach(function(t){t.classList.remove('active');});btn.classList.add('active');['campaigns','attendance','officers','feedback'].forEach(function(n){$('pane-'+n).classList.toggle('active',n===name);});if(name==='officers')loadOfficers();if(name==='feedback')loadFeedback();if(name==='attendance')loadAttendanceTab();}
+async function loadAttendanceTab(){
+  if(!$('attCampSel').options.length){
+    var camps=CAMPAIGNS.length?CAMPAIGNS:(await api('listCampaigns')).campaigns;
+    $('attCampSel').innerHTML=camps.map(function(c){return '<option value="'+c.id+'">'+c.name+'</option>';}).join('')||'<option value="">— no campaigns —</option>';
+  }
+  if(!$('attDate').value)$('attDate').value=new Date().toISOString().slice(0,10);
+  loadAttendance();
+}
+async function loadAttendance(){
+  var campaignId=$('attCampSel').value,date=$('attDate').value;
+  if(!campaignId||!date){$('attendanceBox').innerHTML='';return;}
+  var d;try{d=await api('submissionStatus',{qs:'campaignId='+campaignId+'&date='+date});}catch(e){toast(e.message,'err');return;}
+  var summary='<div class="sg c3" style="margin-bottom:14px">'
+    +statCard('Accounted For',d.accounted+' / '+d.total,d.complete?'All staff accounted for':'Still incomplete','gold',d.total?(d.accounted/d.total*100):0,'gold')
+    +statCard('Branches',d.byBranch.length,'in this campaign')
+    +statCard('Missing',d.missing.length,d.missing.length?'need to submit or justify':'none')
+  +'</div>';
+  var byBranchTable='<div class="tw"><table><thead><tr><th>Branch</th><th class="num">Accounted For</th></tr></thead><tbody>'
+    +d.byBranch.map(function(b){var full=b.accounted===b.total&&b.total>0;return '<tr><td><b>'+b.branchName+'</b></td><td class="num"><span class="bdg '+(full?'bx':'bl')+'">'+b.accounted+' / '+b.total+'</span></td></tr>';}).join('')
+    +'</tbody></table></div>';
+  var missingTable=d.missing.length?('<div class="tw" style="margin-top:14px"><table><thead><tr><th>Staff</th><th>Branch</th></tr></thead><tbody>'
+    +d.missing.map(function(m){return '<tr><td><b>'+m.staffName+'</b></td><td class="muted">'+m.branchName+'</td></tr>';}).join('')
+    +'</tbody></table></div>'):'<div class="tip" style="margin-top:14px"><i class="fas fa-circle-check"></i> Nobody is missing for this date.</div>';
+  $('attendanceBox').innerHTML=summary+'<div class="stit" style="font-size:.85rem;margin-bottom:2px"><div class="ico"><i class="fas fa-store"></i></div>By Branch</div>'+byBranchTable+'<div class="stit" style="font-size:.85rem;margin:16px 0 2px"><div class="ico"><i class="fas fa-user-clock"></i></div>Missing Staff</div>'+missingTable;
+}
 
 async function load(){
   try{CAMPAIGNS=(await api('listCampaigns')).campaigns;}catch(e){toast(e.message,'err');return;}
@@ -213,19 +252,16 @@ function dtab(name,btn){document.querySelectorAll('#detailView .tab').forEach(fu
 var LASTREP=null;
 async function loadReport(){
   var period=$('repPeriod').value;
-  $('weekWrap').classList.toggle('hidden',period!=='weekly');
-  $('monthWrap').classList.toggle('hidden',period!=='monthly');
   $('dayWrap').classList.toggle('hidden',period!=='daily');
   var qs='campaignId='+CUR.id+'&period='+period;
-  if(period==='weekly')qs+='&week='+$('repWeek').value;
-  if(period==='monthly'){if(!$('repMonth').value)$('repMonth').value=defaultReportMonth(CUR);qs+='&month='+$('repMonth').value;}
   if(period==='daily')qs+='&day='+($('repDay').value||'');
   try{var r=await api('report',{qs:qs});}catch(e){toast(e.message,'err');return;}
   LASTREP=r;
   if(period==='daily'&&$('repDay').options.length===0){if(r.dates&&r.dates.length){$('repDay').innerHTML=r.dates.map(function(d){return '<option value="'+d+'">'+d+'</option>';}).join('');$('repDay').value=r.dates[r.dates.length-1];return loadReport();}else $('repDay').innerHTML='<option value="">— no data —</option>';}
   $('xlsBtn').disabled=false;$('pdfBtn').disabled=false;
-  var label=period==='weekly'?('Week '+r.week+' (through '+r.asOfDate+')'):(period==='daily'?('Day '+(r.day||'—')):(period==='monthly'?(r.month+' (through '+r.asOfDate+')'):('Whole campaign (through '+r.asOfDate+')')));
+  var label=period==='daily'?('Day '+r.asOfDate+' (cumulative through this date)'):('Whole campaign (as of '+r.asOfDate+')');
   var cum=r.cumulative;
+  var banner=period==='daily'?renderCompletenessBanner(r.completeness):'';
   var cumBox='<div class="card" style="background:var(--s2);box-shadow:none;margin-bottom:14px">'
     +'<div class="stit" style="margin-bottom:2px"><div class="ico g"><i class="fas fa-layer-group"></i></div>Cumulative to date</div>'
     +'<div class="sdesc">Cumulative actual vs. cumulative plan, from campaign start through '+r.asOfDate+'.</div>'
@@ -235,9 +271,13 @@ async function loadReport(){
     +'</div>'
     +renderKpiTableCumulative(cum)
     +'</div>';
-  var sum='<div class="sg c3" style="margin-bottom:14px">'+r.kpis.map(function(k,i){var v=r.totals['kpi'+i]||0;return statCard(k.name,fmtVal(v,k.unit),'this period');}).join('')+'</div>';
-  var trend=r.trend.length?('<div class="tw"><table><thead><tr><th>Date</th>'+r.kpis.map(function(k){return '<th class="num">'+k.name+'</th>';}).join('')+'</tr></thead><tbody>'+r.trend.map(function(t){return '<tr><td><b>'+t.date+'</b></td>'+r.kpis.map(function(k,i){return '<td class="num">'+fmtVal(t.totals['kpi'+i]||0,k.unit)+'</td>';}).join('')+'</tr>';}).join('')+'</tbody></table></div>'):'<div class="empty"><i class="fas fa-inbox"></i><div>No approved data for this period.</div></div>';
-  $('reportBox').innerHTML='<div class="muted" style="margin-bottom:10px">'+r.title+' · '+label+'</div>'+cumBox+'<div class="stit" style="margin-bottom:2px"><div class="ico"><i class="fas fa-calendar-day"></i></div>This period only</div>'+sum+trend;
+  var dayBox='';
+  if(period==='daily'){
+    dayBox='<div class="stit" style="margin-bottom:2px"><div class="ico"><i class="fas fa-calendar-day"></i></div>That day only</div>'
+     +'<div class="sg c3" style="margin-bottom:14px">'+r.kpis.map(function(k,i){var v=r.dayTotals['kpi'+i]||0;return statCard(k.name,fmtVal(v,k.unit),r.asOfDate);}).join('')+'</div>';
+  }
+  $('reportBox').innerHTML='<div class="muted" style="margin-bottom:10px">'+r.title+' · '+label+'</div>'+banner+cumBox+dayBox;
+  renderTrendChart('trendChart',r.trend);
 }
 
 // ---- officer management ----
@@ -262,15 +302,28 @@ async function editOfficerBranches(id){
   if(!window.DIRCACHE)window.DIRCACHE=await (await fetch(API+'/directory')).json();
   var mine=window.DIRCACHE.branches.filter(function(b){return b.districtId===S.scopeId;});
   var checked=of.branchIds||[];
-  var html='<div class="modalcard" style="width:400px;max-height:70vh;overflow-y:auto"><div class="stit"><div class="ico g"><i class="fas fa-map-pin"></i></div>Assign Branches to '+of.name+'</div>'
-   +mine.map(function(b){return '<label style="display:flex;align-items:center;gap:8px;padding:6px 0"><input type="checkbox" value="'+b.id+'" '+(checked.includes(b.id)?'checked':'')+'> '+b.name+'</label>';}).join('')
+  var map={};try{map=(await api('officerBranchMap')).map;}catch(e){}
+  var html='<div class="modalcard" style="width:420px;max-height:70vh;overflow-y:auto"><div class="stit"><div class="ico g"><i class="fas fa-map-pin"></i></div>Assign Branches to '+of.name+'</div>'
+   +'<div class="muted" style="font-size:.74rem;margin-bottom:8px">A branch can only belong to one officer. Ticking a branch already held by someone else will move it to '+of.name+'.</div>'
+   +mine.map(function(b){
+     var heldBy=map[b.id];
+     var note=(heldBy&&heldBy.officerId!==id)?(' <span class="muted" style="font-size:.72rem">(currently: '+heldBy.officerName+')</span>'):'';
+     return '<label style="display:flex;align-items:center;gap:8px;padding:6px 0"><input type="checkbox" value="'+b.id+'" '+(checked.includes(b.id)?'checked':'')+'> '+b.name+note+'</label>';
+   }).join('')
    +'<div class="row" style="margin-top:14px;justify-content:flex-end"><button class="btn bo bsm" onclick="closeOfficerModal()">Cancel</button><button class="btn bg bsm" onclick="saveOfficerBranches(\''+id+'\')">Save</button></div></div>';
   var m=el('div','modal');m.id='ofModal';m.innerHTML=html;document.body.appendChild(m);
 }
 function closeOfficerModal(){var m=$('ofModal');if(m)m.remove();}
 async function saveOfficerBranches(id){
   var ids=[];document.querySelectorAll('#ofModal input[type=checkbox]:checked').forEach(function(c){ids.push(c.value);});
-  try{await api('setOfficerBranches',{method:'POST',body:{officerId:id,branchIds:ids}});toast('Branches assigned ✓');closeOfficerModal();await loadOfficers();}catch(e){toast(e.message,'err');}
+  try{
+    var res=await api('setOfficerBranches',{method:'POST',body:{officerId:id,branchIds:ids}});
+    var msg='Branches assigned ✓';
+    if(res.reassignedFrom&&res.reassignedFrom.length){
+      msg+=' (reassigned from '+res.reassignedFrom.map(function(r){return r.officerName;}).join(', ')+')';
+    }
+    toast(msg);closeOfficerModal();await loadOfficers();
+  }catch(e){toast(e.message,'err');}
 }
 
 // ---- feedback overview ----

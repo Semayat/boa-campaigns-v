@@ -49,14 +49,29 @@ function workingDaysElapsedThrough(campaign, throughDateStr) {
 // Working days elapsed as of today (capped to the campaign window) — the live "where should we be" figure.
 function workingDaysElapsed(campaign) { return workingDaysElapsedThrough(campaign, todayStr()); }
 
+// ---- Personalized working days for a staff member with approved leave justifications ----
+// A staff member's own approved justified-leave dates count as a personal off-day, on top of
+// the campaign's own off-days — this affects ONLY that staff member's plan, not the branch's.
+function staffWorkingDaysList(campaign, justifiedDates) {
+  const extra = new Set(justifiedDates || []);
+  return workingDaysList(campaign).filter((d) => !extra.has(d));
+}
+function staffComputeWorkingDays(campaign, justifiedDates) { return Math.max(1, staffWorkingDaysList(campaign, justifiedDates).length); }
+function staffWorkingDaysElapsedThrough(campaign, justifiedDates, throughDateStr) {
+  if (throughDateStr < campaign.startDate) return 0;
+  const cap = throughDateStr > campaign.endDate ? campaign.endDate : throughDateStr;
+  return staffWorkingDaysList(campaign, justifiedDates).filter((d) => d <= cap).length;
+}
+
 function pctToPlan(actual, fullTarget, daysElapsed, days) {
   const plan = cumulativePlan(fullTarget, daysElapsed, days);
   return plan > 0 ? (actual / plan * 100) : 0;
 }
 // PACE — actual vs cumulative plan-to-date (working days), weighted by KPI weight. Capped per-KPI at 200%.
-function overallPct(totals, targets, campaign, daysElapsed) {
+// wdOverride lets a staff member's personalized working-day count replace the campaign-wide default.
+function overallPct(totals, targets, campaign, daysElapsed, wdOverride) {
   let s = 0, w = 0;
-  const wd = campaign.workingDays || campaign.days;
+  const wd = wdOverride || campaign.workingDays || campaign.days;
   campaign.kpis.forEach((k, i) => {
     const key = 'kpi' + i, tgt = targets[key];
     if (tgt && tgt > 0) { s += Math.min(200, pctToPlan(totals[key] || 0, tgt, daysElapsed, wd)) * k.weight; w += k.weight; }
@@ -73,16 +88,16 @@ function overallAchieved(totals, targets, campaign) {
   return w > 0 ? (s / w) : 0;
 }
 // Per-KPI pace breakdown (for color-coded display)
-function perKpiPace(totals, targets, campaign, daysElapsed) {
-  const wd = campaign.workingDays || campaign.days;
+function perKpiPace(totals, targets, campaign, daysElapsed, wdOverride) {
+  const wd = wdOverride || campaign.workingDays || campaign.days;
   return campaign.kpis.map((k, i) => {
     const key = 'kpi' + i, tgt = targets[key] || 0;
     return { key, name: k.name, unit: k.unit, weight: k.weight, actual: totals[key] || 0, target: tgt, pace: tgt > 0 ? pctToPlan(totals[key] || 0, tgt, daysElapsed, wd) : 0 };
   });
 }
 // Each KPI's own plan-to-date figure (used by "My Plan" and cumulative reports)
-function perKpiPlan(targets, campaign, daysElapsed) {
-  const wd = campaign.workingDays || campaign.days;
+function perKpiPlan(targets, campaign, daysElapsed, wdOverride) {
+  const wd = wdOverride || campaign.workingDays || campaign.days;
   return campaign.kpis.map((k, i) => {
     const key = 'kpi' + i, tgt = targets[key] || 0;
     return { key, name: k.name, unit: k.unit, plan: tgt > 0 ? cumulativePlan(tgt, daysElapsed, wd) : 0, target: tgt };
@@ -170,6 +185,13 @@ async function notify(recipientKey, message, meta) {
   await Store._set('notif:' + recipientKey + ':' + id, { id, message, meta: meta || {}, createdAt: new Date().toISOString(), read: false });
 }
 async function notifyMany(recipientKeys, message, meta) { for (const k of recipientKeys) await notify(k, message, meta); }
+
+// ---- Leave / non-reporting justifications ----
+async function staffJustifiedDates(campaignId, branchId, staffId) {
+  const all = await Store._list('justification:' + campaignId + ':' + branchId + ':' + staffId + ':');
+  return all.filter((j) => j.status === 'approved').map((j) => j.date);
+}
+const LEAVE_CATEGORIES = ['Sick Leave', 'Annual Leave', 'Public Holiday', 'Official Duty', 'Other'];
 
 // =====================================================================
 // LOGIN
@@ -338,10 +360,34 @@ app.all('/api/data', async (req, res) => {
     const of = await Store._get('officer:' + session.scopeId + ':' + officerId); if (!of) return res.status(404).json({ error: 'Officer not found' });
     const validIds = await Store.listBranchesByDistrict(session.scopeId);
     const validSet = new Set(validIds.map((b) => b.id));
-    of.branchIds = (Array.isArray(branchIds) ? branchIds : []).filter((id) => validSet.has(id));
+    const newBranchIds = (Array.isArray(branchIds) ? branchIds : []).filter((id) => validSet.has(id));
+    // A branch can only ever belong to one officer — automatically un-assign it from
+    // whichever other officer currently holds it (reassignment happens by simply
+    // ticking the branch under the new officer).
+    const allOfficers = await Store._list('officer:' + session.scopeId + ':');
+    const reassignedFrom = [];
+    for (const other of allOfficers) {
+      if (other.id === officerId) continue;
+      const overlap = (other.branchIds || []).filter((id) => newBranchIds.includes(id));
+      if (overlap.length) {
+        other.branchIds = (other.branchIds || []).filter((id) => !newBranchIds.includes(id));
+        await Store._set('officer:' + session.scopeId + ':' + other.id, other);
+        reassignedFrom.push({ officerName: other.name, officerId: other.id, branchIds: overlap });
+        await notify('officer:' + session.scopeId + ':' + other.id, overlap.length + ' branch(es) were reassigned from you to ' + of.name + '.', { kind: 'scope_change' });
+      }
+    }
+    of.branchIds = newBranchIds;
     await Store._set('officer:' + session.scopeId + ':' + officerId, of);
     await notify('officer:' + session.scopeId + ':' + officerId, 'Your assigned branches were updated.', { kind: 'scope_change' });
-    return res.json({ ok: true, branchIds: of.branchIds });
+    return res.json({ ok: true, branchIds: of.branchIds, reassignedFrom });
+  }
+  // Which officer (if any) currently holds each of the district's branches — for the assignment UI.
+  if (action === 'officerBranchMap') {
+    if (session.role !== 'district') return res.status(403).json({ error: 'District only' });
+    const allOfficers = await Store._list('officer:' + session.scopeId + ':');
+    const map = {};
+    allOfficers.forEach((o) => { if (o.active !== false) (o.branchIds || []).forEach((bId) => { map[bId] = { officerId: o.id, officerName: o.name }; }); });
+    return res.json({ map });
   }
   if (action === 'resetOfficerPassword') {
     if (session.role !== 'district') return res.status(403).json({ error: 'District only' });
@@ -540,6 +586,8 @@ app.all('/api/data', async (req, res) => {
     const branch = await Store.getBranch(session.scopeId);
     const staffRec = (branch.staff || []).find((s) => s.id === session.staffId);
     if (!staffRec || staffRec.active === false) return res.status(403).json({ error: 'Your access has been deactivated' });
+    const existingJust = await Store._get('justification:' + campaignId + ':' + session.scopeId + ':' + session.staffId + ':' + date);
+    if (existingJust && existingJust.status !== 'rejected') return res.status(409).json({ error: 'You already have a leave justification ' + (existingJust.status) + ' for this date. Withdraw it first if you want to submit numbers instead.' });
     const visitList = Array.isArray(visits) ? visits.filter((v) => v && (v.account || v.customer)) : [];
     const vals = Object.assign({}, values);
     const entry = { campaignId, branchId: session.scopeId, districtId: session.districtId, staffId: session.staffId, staffName: staffRec.name, date, values: vals, visits: visitList, remark: remark || '', status: 'pending', rejectReason: '', submittedAt: new Date().toISOString() };
@@ -563,17 +611,67 @@ app.all('/api/data', async (req, res) => {
     const activeStaff = (branch.staff || []).filter((s) => s.active !== false);
     const all = await Store._list('entry:' + campaignId + ':' + session.scopeId + ':');
     const mine = all.filter((e) => e.staffId === session.staffId);
-    const elapsed = workingDaysElapsed(c);
+    const justifiedDates = await staffJustifiedDates(campaignId, session.scopeId, session.staffId);
+    const myWd = staffComputeWorkingDays(c, justifiedDates);
+    const elapsed = staffWorkingDaysElapsedThrough(c, justifiedDates, todayStr() > c.endDate ? c.endDate : todayStr());
     const myTargets = await staffEffectiveTarget(c, session.scopeId, session.staffId, activeStaff.length);
     const totals = sumTotals(mine.map((e) => entryTotals(e, keys)), keys);
     const pendingCount = mine.filter((e) => e.status === 'pending').length;
     return res.json({
       staffName: staffRec ? staffRec.name : 'Staff', mustChangePassword: !!(staffRec && staffRec.mustChangePassword),
-      branch: { name: branch.name, districtName: branch.districtName }, campaign: c, keys, elapsed,
+      branch: { name: branch.name, districtName: branch.districtName }, campaign: c, keys, elapsed, myWorkingDays: myWd, justifiedDaysCount: justifiedDates.length,
       targets: myTargets, totals, pendingCount,
-      perKpi: perKpiPace(totals, myTargets, c, elapsed),
-      pct: overallPct(totals, myTargets, c, elapsed), achieved: overallAchieved(totals, myTargets, c)
+      perKpi: perKpiPace(totals, myTargets, c, elapsed, myWd),
+      pct: overallPct(totals, myTargets, c, elapsed, myWd), achieved: overallAchieved(totals, myTargets, c)
     });
+  }
+
+  // ---------------- LEAVE / NON-REPORTING JUSTIFICATIONS (staff files, branch approves) ----------------
+  if (action === 'submitJustification') {
+    if (session.role !== 'staff') return res.status(403).json({ error: 'Staff only' });
+    const { campaignId, date, category, note } = req.body || {};
+    if (!campaignId || !date || !category) return res.status(400).json({ error: 'Missing campaign, date, or category' });
+    if (!LEAVE_CATEGORIES.includes(category)) return res.status(400).json({ error: 'Unknown leave category' });
+    const c = await Store._get('campaign:' + campaignId); if (!c) return res.status(404).json({ error: 'Campaign not found' });
+    if (!c.scope.branchIds.includes(session.scopeId)) return res.status(403).json({ error: 'Your branch is not part of this campaign' });
+    if (date < c.startDate || date > c.endDate) return res.status(400).json({ error: 'Date is outside the campaign period' });
+    const existingEntry = await Store._get('entry:' + campaignId + ':' + session.scopeId + ':' + session.staffId + ':' + date);
+    if (existingEntry) return res.status(409).json({ error: 'You already have a daily submission for this date.' });
+    const branch = await Store.getBranch(session.scopeId);
+    const staffRec = (branch.staff || []).find((s) => s.id === session.staffId);
+    const key = 'justification:' + campaignId + ':' + session.scopeId + ':' + session.staffId + ':' + date;
+    const just = { campaignId, branchId: session.scopeId, districtId: session.districtId, staffId: session.staffId, staffName: staffRec ? staffRec.name : '', date, category, note: String(note || '').trim(), status: 'pending', rejectReason: '', submittedAt: new Date().toISOString() };
+    await Store._set(key, just);
+    return res.json({ ok: true, justification: just });
+  }
+  if (action === 'myJustifications') {
+    if (session.role !== 'staff') return res.status(403).json({ error: 'Staff only' });
+    const campaignId = req.query.campaignId;
+    const all = await Store._list('justification:' + campaignId + ':' + session.scopeId + ':');
+    const mine = all.filter((j) => j.staffId === session.staffId).sort((a, b) => a.date < b.date ? 1 : -1);
+    return res.json({ justifications: mine });
+  }
+  if (action === 'pendingJustifications') {
+    if (session.role !== 'branch') return res.status(403).json({ error: 'Branch only' });
+    const campaignId = req.query.campaignId;
+    const all = await Store._list('justification:' + campaignId + ':' + session.scopeId + ':');
+    const pending = all.filter((j) => j.status === 'pending').sort((a, b) => a.date < b.date ? 1 : -1);
+    return res.json({ pending, categories: LEAVE_CATEGORIES });
+  }
+  if (action === 'decideJustification') {
+    if (session.role !== 'branch') return res.status(403).json({ error: 'Branch only' });
+    const { campaignId, staffId, date, decision, reason } = req.body || {};
+    if (!campaignId || !staffId || !date || !['approve', 'reject'].includes(decision)) return res.status(400).json({ error: 'Missing or invalid fields' });
+    const key = 'justification:' + campaignId + ':' + session.scopeId + ':' + staffId + ':' + date;
+    const just = await Store._get(key); if (!just) return res.status(404).json({ error: 'Justification not found' });
+    if (just.status !== 'pending') return res.status(409).json({ error: 'Already reviewed' });
+    just.status = decision === 'approve' ? 'approved' : 'rejected';
+    just.rejectReason = decision === 'reject' ? String(reason || '').trim() : '';
+    just.decidedAt = new Date().toISOString();
+    await Store._set(key, just);
+    const msg = decision === 'approve' ? ('Your ' + just.category.toLowerCase() + ' for ' + date + ' was approved.') : ('Your leave justification for ' + date + ' was rejected' + (just.rejectReason ? (': ' + just.rejectReason) : '.'));
+    await notify('staff:' + session.scopeId + ':' + staffId, msg, { kind: 'justification_' + just.status, campaignId });
+    return res.json({ ok: true, justification: just });
   }
 
   // ---------------- APPROVALS (branch) ----------------
@@ -734,51 +832,87 @@ app.all('/api/data', async (req, res) => {
     });
   }
 
-  // ---------------- REPORTS (campaign-scoped) ----------------
+// Who hasn't submitted-or-justified for a given date, across a set of branches.
+async function computeCompleteness(campaignId, branchIds, date) {
+  let total = 0, accounted = 0; const missing = []; const byBranch = [];
+  for (const bId of branchIds) {
+    const b = await Store.getBranch(bId); if (!b) continue;
+    const activeStaff = (b.staff || []).filter((s) => s.active !== false);
+    let bAccounted = 0;
+    for (const s of activeStaff) {
+      total++;
+      const entry = await Store._get('entry:' + campaignId + ':' + bId + ':' + s.id + ':' + date);
+      const just = await Store._get('justification:' + campaignId + ':' + bId + ':' + s.id + ':' + date);
+      if (entry || just) { accounted++; bAccounted++; }
+      else missing.push({ branchId: bId, branchName: b.name, staffId: s.id, staffName: s.name });
+    }
+    byBranch.push({ branchId: bId, branchName: b.name, total: activeStaff.length, accounted: bAccounted });
+  }
+  return { date, total, accounted, complete: total > 0 && accounted === total, missing, byBranch };
+}
+// Daily cumulative pace series from campaign start through asOfDate, for charting.
+function buildDailyTrend(approvedEntries, keys, campaign, asOfDate, targets, elapsedFn, wdOverride) {
+  if (asOfDate < campaign.startDate) return [];
+  const dates = allDatesInRange(campaign.startDate, asOfDate);
+  const byDate = {};
+  approvedEntries.forEach((e) => { if (!byDate[e.date]) { byDate[e.date] = {}; keys.forEach((k) => byDate[e.date][k] = 0); } keys.forEach((k) => byDate[e.date][k] += Number((e.values && e.values[k]) || 0)); });
+  const running = {}; keys.forEach((k) => running[k] = 0);
+  return dates.map((d) => {
+    if (byDate[d]) keys.forEach((k) => running[k] += byDate[d][k]);
+    const elapsed = elapsedFn(d);
+    return { date: d, pct: Math.round(overallPct(running, targets, campaign, elapsed, wdOverride) * 10) / 10, achieved: Math.round(overallAchieved(running, targets, campaign) * 10) / 10 };
+  });
+}
+
+  // ---------------- REPORTS (campaign-scoped — Daily or Grand only) ----------------
   if (action === 'report') {
     if (session.role === 'officer') return res.status(403).json({ error: 'Reports are available to Staff, Branch, District and HO' });
     const campaignId = req.query.campaignId;
     const c = await Store._get('campaign:' + campaignId); if (!c) return res.status(404).json({ error: 'Campaign not found' });
     const keys = kpiKeys(c);
-    const period = req.query.period || 'monthly'; const week = parseInt(req.query.week || '0', 10); const day = req.query.day || ''; const month = req.query.month || '';
-    let allEntries, title, scopeTarget;
+    const period = req.query.period === 'daily' ? 'daily' : 'grand';
+    const day = req.query.day || '';
+    let allEntries, title, scopeTarget, branchScopeIds, wdOverride = null, elapsedFn = (d) => workingDaysElapsedThrough(c, d);
     if (session.role === 'staff') {
       const branch = await Store.getBranch(session.scopeId); const staffRec = (branch.staff || []).find((s) => s.id === session.staffId);
       const activeStaff = (branch.staff || []).filter((s) => s.active !== false);
       allEntries = (await Store._list('entry:' + campaignId + ':' + session.scopeId + ':')).filter((e) => e.staffId === session.staffId);
       title = staffRec ? staffRec.name : 'My'; scopeTarget = await staffEffectiveTarget(c, session.scopeId, session.staffId, activeStaff.length);
+      const justifiedDates = await staffJustifiedDates(campaignId, session.scopeId, session.staffId);
+      wdOverride = staffComputeWorkingDays(c, justifiedDates);
+      elapsedFn = (d) => staffWorkingDaysElapsedThrough(c, justifiedDates, d);
+      branchScopeIds = null;
     }
-    else if (session.role === 'branch') { allEntries = await Store._list('entry:' + campaignId + ':' + session.scopeId + ':'); const b = await Store.getBranch(session.scopeId); title = b.name; scopeTarget = await branchEffectiveTarget(c, session.scopeId); }
-    else if (session.role === 'district') { allEntries = (await Store._list('entry:' + campaignId + ':')).filter((e) => e.districtId === session.scopeId); const d = await Store.getDistrict(session.scopeId); title = d.name; scopeTarget = await districtEffectiveTarget(c, session.scopeId); }
-    else { allEntries = await Store._list('entry:' + campaignId + ':'); title = 'National'; scopeTarget = c.targets; }
+    else if (session.role === 'branch') { allEntries = await Store._list('entry:' + campaignId + ':' + session.scopeId + ':'); const b = await Store.getBranch(session.scopeId); title = b.name; scopeTarget = await branchEffectiveTarget(c, session.scopeId); branchScopeIds = [session.scopeId]; }
+    else if (session.role === 'district') { allEntries = (await Store._list('entry:' + campaignId + ':')).filter((e) => e.districtId === session.scopeId); const d = await Store.getDistrict(session.scopeId); title = d.name; scopeTarget = await districtEffectiveTarget(c, session.scopeId); branchScopeIds = (await Store.listBranchesByDistrict(session.scopeId)).map((b) => b.id).filter((id) => c.scope.branchIds.includes(id)); }
+    else { allEntries = await Store._list('entry:' + campaignId + ':'); title = 'National'; scopeTarget = c.targets; branchScopeIds = c.scope.branchIds; }
     const approved = allEntries.filter((e) => e.status === 'approved');
     const dates = Array.from(new Set(approved.map((e) => e.date))).sort();
 
-    // as-of date for this period selection (cumulative always runs from campaign start through here)
+    // as-of date: 'daily' = a specific date's cumulative-through-that-day; 'grand' = as of today/campaign end
     let asOfDate = todayStr() > c.endDate ? c.endDate : todayStr();
-    let periodEntries = approved;
-    if (period === 'daily') { const d = day || (dates.length ? dates[dates.length - 1] : c.startDate); asOfDate = d; periodEntries = approved.filter((e) => e.date === d); }
-    else if (period === 'weekly') { const w = week || inWeek(asOfDate, c.startDate); asOfDate = weekEndDate(w, c); periodEntries = approved.filter((e) => inWeek(e.date, c.startDate) === w); }
-    else if (period === 'monthly') { const ym = month || asOfDate.slice(0, 7); asOfDate = monthEndDate(ym, c); periodEntries = approved.filter((e) => e.date.slice(0, 7) === ym); }
-    // 'grand' uses the full campaign as-of today/end, periodEntries = everything (no extra filter)
+    if (period === 'daily') asOfDate = day || (dates.length ? dates[dates.length - 1] : c.startDate);
 
-    const periodTotals = sumTotals(periodEntries.map((e) => entryTotals(e, keys)), keys);
     const cumulativeEntries = approved.filter((e) => e.date <= asOfDate);
     const cumulativeTotals = sumTotals(cumulativeEntries.map((e) => entryTotals(e, keys)), keys);
-    const elapsedThrough = workingDaysElapsedThrough(c, asOfDate);
+    const elapsedThrough = elapsedFn(asOfDate);
+    const dayOnlyTotals = sumTotals(approved.filter((e) => e.date === asOfDate).map((e) => entryTotals(e, keys)), keys);
 
-    const byDate = {}; periodEntries.forEach((e) => { const t = entryTotals(e, keys); if (!byDate[e.date]) { byDate[e.date] = {}; keys.forEach((k) => byDate[e.date][k] = 0); } keys.forEach((k) => byDate[e.date][k] += t[k]); });
-    const trend = Object.keys(byDate).sort().map((d) => ({ date: d, totals: byDate[d] }));
+    const trend = buildDailyTrend(approved, keys, c, asOfDate, scopeTarget, elapsedFn, wdOverride);
+
+    let completeness = null;
+    if (period === 'daily' && branchScopeIds) completeness = await computeCompleteness(campaignId, branchScopeIds, asOfDate);
 
     return res.json({
-      title, period, week, day, month, asOfDate, kpis: c.kpis, keys,
-      totals: periodTotals, trend, days: c.days, workingDays: c.workingDays || c.days, dates, campaignName: c.name,
+      title, period, day, asOfDate, kpis: c.kpis, keys,
+      dayTotals: dayOnlyTotals, trend, days: c.days, workingDays: wdOverride || c.workingDays || c.days, dates, campaignName: c.name,
+      completeness,
       cumulative: {
         totals: cumulativeTotals, target: scopeTarget,
-        perKpi: perKpiPace(cumulativeTotals, scopeTarget, c, elapsedThrough),
-        pct: overallPct(cumulativeTotals, scopeTarget, c, elapsedThrough),
+        perKpi: perKpiPace(cumulativeTotals, scopeTarget, c, elapsedThrough, wdOverride),
+        pct: overallPct(cumulativeTotals, scopeTarget, c, elapsedThrough, wdOverride),
         achieved: overallAchieved(cumulativeTotals, scopeTarget, c),
-        plan: perKpiPlan(scopeTarget, c, elapsedThrough)
+        plan: perKpiPlan(scopeTarget, c, elapsedThrough, wdOverride)
       }
     });
   }
@@ -788,23 +922,38 @@ app.all('/api/data', async (req, res) => {
     if (!['branch', 'staff'].includes(session.role)) return res.status(403).json({ error: 'Branch and Staff only' });
     const campaignId = req.query.campaignId;
     const c = await Store._get('campaign:' + campaignId); if (!c) return res.status(404).json({ error: 'Campaign not found' });
-    let targets;
-    if (session.role === 'branch') targets = await branchEffectiveTarget(c, session.scopeId);
-    else { const branch = await Store.getBranch(session.scopeId); const activeStaff = (branch.staff || []).filter((s) => s.active !== false); targets = await staffEffectiveTarget(c, session.scopeId, session.staffId, activeStaff.length); }
-    const wd = c.workingDays || c.days;
+    let targets, wd, justifiedDates = [];
+    if (session.role === 'branch') { targets = await branchEffectiveTarget(c, session.scopeId); wd = c.workingDays || c.days; }
+    else {
+      const branch = await Store.getBranch(session.scopeId); const activeStaff = (branch.staff || []).filter((s) => s.active !== false);
+      targets = await staffEffectiveTarget(c, session.scopeId, session.staffId, activeStaff.length);
+      justifiedDates = await staffJustifiedDates(campaignId, session.scopeId, session.staffId);
+      wd = staffComputeWorkingDays(c, justifiedDates);
+    }
     const today = todayStr() > c.endDate ? c.endDate : todayStr();
-    const weekNum = inWeek(today, c.startDate);
-    const monthKey = today.slice(0, 7);
-    const dailyPerKpi = c.kpis.map((k, i) => { const key = 'kpi' + i, tgt = targets[key] || 0; const perDay = wd > 0 ? Math.round(tgt / wd) : 0; return { key, name: k.name, unit: k.unit, plan: isOffDay(c, today) ? 0 : perDay }; });
-    const weeklyElapsed = workingDaysElapsedThrough(c, weekEndDate(weekNum, c));
-    const monthlyElapsed = workingDaysElapsedThrough(c, monthEndDate(monthKey, c));
+    const isPersonalOffToday = session.role === 'staff' && justifiedDates.includes(today);
+    const dailyPerKpi = c.kpis.map((k, i) => { const key = 'kpi' + i, tgt = targets[key] || 0; const perDay = wd > 0 ? Math.round(tgt / wd) : 0; return { key, name: k.name, unit: k.unit, plan: (isOffDay(c, today) || isPersonalOffToday) ? 0 : perDay }; });
     return res.json({
-      campaign: c, targets,
+      campaign: c, targets, workingDays: wd, isOffToday: isOffDay(c, today) || isPersonalOffToday,
       daily: dailyPerKpi,
-      weekly: perKpiPlan(targets, c, weeklyElapsed),
-      monthly: perKpiPlan(targets, c, monthlyElapsed),
       grand: c.kpis.map((k, i) => ({ key: 'kpi' + i, name: k.name, unit: k.unit, plan: targets['kpi' + i] || 0 }))
     });
+  }
+
+  // ---------------- WHO HASN'T SUBMITTED (district & district officer) ----------------
+  if (action === 'submissionStatus') {
+    if (!['district', 'officer'].includes(session.role)) return res.status(403).json({ error: 'District and District Officer only' });
+    const campaignId = req.query.campaignId; const date = req.query.date || todayStr();
+    const c = await Store._get('campaign:' + campaignId); if (!c) return res.status(404).json({ error: 'Campaign not found' });
+    let branchIds;
+    if (session.role === 'district') {
+      branchIds = (await Store.listBranchesByDistrict(session.scopeId)).map((b) => b.id).filter((id) => c.scope.branchIds.includes(id));
+    } else {
+      const of = await Store._get('officer:' + session.scopeId + ':' + session.officerId); if (!of) return res.status(404).json({ error: 'Officer record not found' });
+      branchIds = (of.branchIds || []).filter((id) => c.scope.branchIds.includes(id));
+    }
+    const result = await computeCompleteness(campaignId, branchIds, date);
+    return res.json({ campaignName: c.name, date, days: allDatesInRange(c.startDate, c.endDate > todayStr() ? todayStr() : c.endDate), ...result });
   }
 
   // ---------------- AUDIT / FEEDBACK (district officers) ----------------
@@ -839,6 +988,33 @@ app.all('/api/data', async (req, res) => {
     }
     return res.json({ officerName: of.name, mustChangePassword: !!of.mustChangePassword, keys, kpis: c ? c.kpis : [], branches: rows, total });
   }
+  // Officer drills into ONE assigned branch to see its individual staff's plan/report.
+  if (action === 'officerBranchStaff') {
+    if (session.role !== 'officer') return res.status(403).json({ error: 'Officer only' });
+    const { campaignId, branchId } = req.query;
+    const of = await Store._get('officer:' + session.scopeId + ':' + session.officerId); if (!of) return res.status(404).json({ error: 'Officer record not found' });
+    if (!(of.branchIds || []).includes(branchId)) return res.status(403).json({ error: 'Not assigned to this branch' });
+    const c = await Store._get('campaign:' + campaignId); if (!c) return res.status(404).json({ error: 'Campaign not found' });
+    if (!c.scope.branchIds.includes(branchId)) return res.status(404).json({ error: 'This branch is not part of this campaign' });
+    const keys = kpiKeys(c);
+    const branch = await Store.getBranch(branchId);
+    const activeStaff = (branch.staff || []).filter((s) => s.active !== false);
+    const ent = await Store._list('entry:' + campaignId + ':' + branchId + ':');
+    const rows = [];
+    for (const s of activeStaff) {
+      const mine = ent.filter((e) => e.staffId === s.id);
+      const totals = sumTotals(mine.map((e) => entryTotals(e, keys)), keys);
+      const justifiedDates = await staffJustifiedDates(campaignId, branchId, s.id);
+      const wd = staffComputeWorkingDays(c, justifiedDates);
+      const elapsed = staffWorkingDaysElapsedThrough(c, justifiedDates, todayStr() > c.endDate ? c.endDate : todayStr());
+      const targets = await staffEffectiveTarget(c, branchId, s.id, activeStaff.length);
+      const perKpi = perKpiPace(totals, targets, c, elapsed, wd).map((k) => Object.assign({}, k, { plan: k.target > 0 ? cumulativePlan(k.target, elapsed, wd) : 0 }));
+      rows.push({ id: s.id, name: s.name, perKpi, pct: overallPct(totals, targets, c, elapsed, wd), achieved: overallAchieved(totals, targets, c) });
+    }
+    rows.sort((a, b) => b.pct - a.pct);
+    return res.json({ branchName: branch.name, kpis: c.kpis, staff: rows });
+  }
+
   if (action === 'postFeedback') {
     if (session.role !== 'officer') return res.status(403).json({ error: 'Officer only' });
     const { branchId, staffId, campaignId, period, message } = req.body || {};

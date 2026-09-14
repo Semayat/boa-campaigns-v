@@ -301,3 +301,14 @@ input.numtext{font-variant-numeric:tabular-nums;text-align:right}
 .branchpickitem{display:flex;align-items:center;gap:8px;padding:8px 10px;font-size:.82rem;font-weight:600;color:var(--t2);cursor:pointer;border-radius:8px}
 .branchpickitem:hover{background:var(--s)}
 .branchpickitem input{width:15px;height:15px;accent-color:var(--gold);flex-shrink:0}
+
+/* ---- Compact plan/report table cells (narrower columns, labeled rows) ---- */
+.plantable2 td.num{min-width:110px}
+.krow{font-size:.78rem;white-space:nowrap}
+.klbl{font-size:.62rem;text-transform:uppercase;letter-spacing:.03em;color:var(--t4);font-weight:800;margin-right:3px}
+
+/* ---- Searchable combobox (branch picker on login) ---- */
+.searchsel{position:relative}
+.searchdropdown{position:absolute;top:calc(100% + 4px);left:0;right:0;max-height:220px;overflow-y:auto;background:var(--s);border:1px solid var(--b);border-radius:var(--r);box-shadow:var(--shb);z-index:50}
+.searchopt{padding:9px 12px;font-size:.85rem;cursor:pointer}
+.searchopt:hover{background:var(--s2)}
